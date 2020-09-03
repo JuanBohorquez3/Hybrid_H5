@@ -3,8 +3,6 @@ import glob
 import sys
 
 from numpy import *
-
-sys.path.append('Z:\\Public\\Hybrid\\Useful Code\\Python')
 #from counter_analysis import counterData
 import matplotlib.pyplot as plt
 from scipy.optimize import curve_fit
