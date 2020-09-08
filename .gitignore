@@ -130,3 +130,4 @@ dmypy.json
 
 # Pycharm
 /.idea
+/H5_python3/results.hdf5
