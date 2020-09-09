@@ -155,7 +155,7 @@ class HMROI:
         Returns:
             a slice object to be used to slice a 2D numpy array
         """
-        return s_[self.left:self.right, self.top:self.bottom]
+        return s_[self.top:self.bottom, self.left:self.right]
 
     def __repr__(self):
         return f"{self.__class__.__name__}({self.width},{self.height},dic = {self.__dict__})"
