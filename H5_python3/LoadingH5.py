@@ -21,7 +21,7 @@ def get_iteration_ivars(iteration, *ivar_names: str) -> Dict[str, Any]:
     return {name: iteration[f"variables/{name}"][()] for name in ivar_names}
 
 
-def get_indep_vars(results_file) -> OrderedDict[str, List[Any]]:
+def get_indep_vars(results_file) -> OrderedDict:
     """
     Finds the independent variables that were varied this experiment and puts them in a dictionary
 
@@ -29,8 +29,9 @@ def get_indep_vars(results_file) -> OrderedDict[str, List[Any]]:
         results_file : h5py File corresponding to the relevant results file
 
     Returns:
-        dictionary mapping varied independent variable names to the values these variables took.
-        Keys are sorted alphabetically
+        OrderedDict[str: List[Any]]
+            dictionary mapping varied independent variable names to the values these variables took.
+            Sorted alphabetically by keys
     """
 
     indep_vars = {}
@@ -40,8 +41,7 @@ def get_indep_vars(results_file) -> OrderedDict[str, List[Any]]:
             # print(f"{variable[0]}\n\t{values}")
             if iterable(values):
                 indep_vars.update({variable[0]: array(values)})
-
-    return OrderedDict(sorted(indep_vars))
+    return OrderedDict(sorted(indep_vars.items()))
 
 
 def make_iterations_df(h5file, iVars: List[str]) -> pd.DataFrame:
@@ -67,9 +67,10 @@ def make_iterations_df(h5file, iVars: List[str]) -> pd.DataFrame:
         iterations = iterations.append(pd.DataFrame(ivar_vals, index=[i]))
     return iterations.sort_index()
 
+
 def fold_to_nd(iterations: pd.DataFrame, data_array: array = None) -> ndarray:
     """
-    Folds data array into an ndarray conveniently shaped
+    Folds data array into an ndarray conveniently shaped for operations
     Args:
         iterations : ndarray of experiment data. Indexed by iteration with corresponding values of
             independent variables filling out the other columns
@@ -78,4 +79,24 @@ def fold_to_nd(iterations: pd.DataFrame, data_array: array = None) -> ndarray:
     Returns:
         the folded data_array. Indexed
             [independent_variable_step1,independent_variable_step2,...]
+            independent variables ordered by name (alphabetically)
     """
+    if data_array is None:
+        data_array = array(iterations['iteration'], dtype=int)
+    return data_array.reshape(
+        *list(lens_of_ivals(iterations).values())
+    ).T
+
+
+def lens_of_ivals(iterations: pd.DataFrame) -> Dict[str, int]:
+    """
+    Creates a dictionary mapping independent variable names to the number of steps taken by that
+    independent variable.
+    Args:
+        iterations: dataframe of iterations and values of each independent variable for a given
+            iteration
+    Returns:
+        dict of independent variable names mapped to the length of the array of values that
+            independent took
+    """
+    return {key: len(set(values)) for key, values in iterations.items() if key != 'iteration'}
