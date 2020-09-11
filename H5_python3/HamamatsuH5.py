@@ -213,7 +213,13 @@ def load_data(results_file, roi: HMROI = None):
         for measurement, m_group in i_group['measurements'].items():
             # print(f"\tmeasurement : {measurement} : {type(measurement)}")
             for shot, s_group in m_group['data/Hamamatsu/shots'].items():
-                # print(f"\t\tshot : {shot} : {type(shot)}")
-                hm_pix[int(iteration), int(measurement), int(shot)] = s_group[()][roi.slice]
+                try:
+                    # print(f"\t\tshot : {shot} : {type(shot)}")
+                    hm_pix[int(iteration), int(measurement), int(shot)] = s_group[()][roi.slice]
+                except IndexError as e:
+                    warnings.warn(
+                        f"{e}\n iteration : {iteration} measurement : {measurement} shot {shot}"
+                    )
+                    continue
 
     return hm_pix
