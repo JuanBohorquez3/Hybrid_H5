@@ -131,3 +131,5 @@ dmypy.json
 # Pycharm
 /.idea
 /H5_python3/results.hdf5
+/H5_python3/results1D.hdf5
+/H5_python3/results2D.hdf5
