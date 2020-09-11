@@ -1,14 +1,14 @@
 """
-Loads data from results file into memory
+Loads and manipulates data from results file into memory
 """
 import h5py
-from typing import List, Dict, Any
+from typing import List, Tuple, Dict, Any
 from collections import OrderedDict
 from numpy import *
 import pandas as pd
 
 
-def get_iteration_ivars(iteration, *ivar_names: str) -> Dict[str, Any]:
+def get_iteration_ivars(iteration: pd.DataFrame, *ivar_names: str) -> Dict[str, Any]:
     """
     Gets the values of independent variables for the iteration that was passed in
 
@@ -68,13 +68,13 @@ def make_iterations_df(h5file, iVars: List[str]) -> pd.DataFrame:
     return iterations.sort_index()
 
 
-def fold_to_nd(iterations: pd.DataFrame, data_array: array = None) -> ndarray:
+def fold_to_nd(iterations: pd.DataFrame, data_array: ndarray = None) -> ndarray:
     """
     Folds data array into an ndarray conveniently shaped for operations
     Args:
         iterations : ndarray of experiment data. Indexed by iteration with corresponding values of
             independent variables filling out the other columns
-        data_array : 1D array with data from each iteration. Should be indexed [iteration,...]
+        data_array : 1D array with data from each iteration. Should be indexed [iteration]
             if none, an array of iteration numbers is returned
     Returns:
         the folded data_array. Indexed
@@ -100,3 +100,21 @@ def lens_of_ivals(iterations: pd.DataFrame) -> Dict[str, int]:
             independent took
     """
     return {key: len(set(values)) for key, values in iterations.items() if key != 'iteration'}
+
+
+def ivar_step_size(iterations: pd.DataFrame) -> Tuple[float]:
+    """
+    Returns the step size each independent variable took this experiment, assuming values of
+    independent variables were evenly spaced
+    Args:
+        iterations: DataFrame of iterations and the values of independent variables during that
+            iteration
+
+    Returns:
+        tuple of step sizes or each independent variable. Ordered as they are in iterations, which
+            should be alphabetically by name
+    """
+    sorted_values = [
+        sorted(list(set(values))) for iVar, values in iterations.items() if iVar != 'iteration'
+    ]
+    return tuple([float(vals[1]-vals[0]) for vals in sorted_values])
