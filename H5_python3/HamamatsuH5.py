@@ -198,7 +198,7 @@ def load_data(results_file, roi: HMROI = None):
         5D numpy array holding all of the data taken by the hamamatsu during the experiment
         indexed [iteration,measurement,shot,horizontal_pixel,vertical_pixel]
     """
-    measurements = results_file['settings/experiment/measurementsPerIteration'][()] + 1
+    measurements = results_file['settings/experiment/measurementsPerIteration'][()]+1
     num_its = len(results_file['iterations'])
     shots_per_measurement = int(
         results_file['/settings/experiment/LabView/camera/shotsPerMeasurement/function'][()])
