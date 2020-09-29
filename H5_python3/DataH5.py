@@ -8,7 +8,7 @@ from numpy import *
 import pandas as pd
 
 
-def get_iteration_ivars(iteration: pd.DataFrame, *ivar_names: str) -> Dict[str, Any]:
+def get_iteration_ivars(iteration: h5py.Group, *ivar_names: str) -> Dict[str, Any]:
     """
     Gets the values of independent variables for the iteration that was passed in
 

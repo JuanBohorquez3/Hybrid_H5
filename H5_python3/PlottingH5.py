@@ -8,6 +8,7 @@ from typing import Tuple
 
 from DataH5 import fold_to_nd, ivar_step_size
 
+# TODO : Refactor to work with new iterations class!
 
 def default_plotting(iterations: pd.DataFrame, data: ndarray, data_ers: ndarray, shots: int = None):
     """
@@ -48,15 +49,16 @@ def default_plotting(iterations: pd.DataFrame, data: ndarray, data_ers: ndarray,
     elif len(iterations.keys()) == 3:
         fig, axarr = plt.subplots(1, 2, figsize=(2 * 5, 5))
         iVars = [key for key in iterations if key != 'iteration']
-        pix_size_x, pix_size_y = ivar_step_size(iterations)
+        pix_size_y, pix_size_x = ivar_step_size(iterations)
+        extent = [
+            min(iterations[iVars[1]] - pix_size_x / 2),  # left
+            max(iterations[iVars[1]] + pix_size_x / 2),  # right
+            max(iterations[iVars[0]] + pix_size_y / 2),  # bottom
+            min(iterations[iVars[0]] - pix_size_y / 2)   # top
+        ]
         for shot in range(shots):
             means_nd = fold_to_nd(iterations, data[:, shot])
-            im = axarr[shot].imshow(means_nd, interpolation='none', extent=
-            [min(iterations[iVars[1]] - pix_size_x / 2),
-             max(iterations[iVars[1]] + pix_size_x / 2),
-             max(iterations[iVars[0]] + pix_size_y / 2),
-             min(iterations[iVars[0]] - pix_size_y / 2)
-             ])
+            im = axarr[shot].imshow(means_nd, interpolation='none', aspect='auto', extent=extent)
             fig.colorbar(im, ax=axarr[shot], use_gridspec=True, shrink=.7)
             axarr[shot].set_xlabel(iVars[1])
             axarr[shot].set_ylabel(iVars[0])
