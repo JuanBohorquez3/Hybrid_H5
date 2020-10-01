@@ -2,7 +2,7 @@ import pandas as pd
 import h5py
 from numpy import *
 from collections import OrderedDict
-from typing import List, Dict, Any, Union
+from typing import List, Dict, Tuple, Any, Union
 
 
 def seed_permute(x: Union[int, ndarray], seed: Any):
@@ -57,6 +57,20 @@ class Iterations:
         """
         return self.__independent_variables
 
+    @property
+    def step_sizes(self) -> Tuple[float]:
+        """
+        Returns:
+            the step size of each independent variable in this experiment, assuming even spacing
+                for all independent variables.
+                Tuple ordered alphabetically by variable name
+
+        """
+        sorted_values = [
+            sorted(list(set(values))) for iVar, values in self.items() if iVar != 'iteration'
+        ]
+        return tuple([float(vals[1] - vals[0]) for vals in sorted_values])
+
     @staticmethod
     def __get_iteration_ivars(iteration: h5py.Group, *ivar_names: str) -> Dict[str, Any]:
         """
@@ -106,9 +120,7 @@ class Iterations:
             df = df.append(pd.DataFrame(ivar_vals, index=[i]))
 
         # Sort the dataframe indeces by values if independent variables (not iteration number) so
-        # operations can be performed somewhat intuitively
-        print(df)
-        print(self.ivars)
+        # operations can be performed somewhat intuitively  TODO : Document this better
         return df.sort_values(self.ivars[::-1], kind="mergesort", ignore_index=True)
 
     def fold_to_nd(self, data_array: ndarray = None) -> ndarray:
@@ -145,3 +157,12 @@ class Iterations:
 
     def __str__(self):
         return str(self.data_frame)
+
+    def items(self):
+        return self.data_frame.items()
+
+    def iterrows(self):
+        return self.data_frame.iterrows()
+
+    def __repr__(self):
+        return self.data_frame.__repr__()
