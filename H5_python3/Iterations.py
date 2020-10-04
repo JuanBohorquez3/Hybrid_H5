@@ -166,3 +166,6 @@ class Iterations:
 
     def __repr__(self):
         return self.data_frame.__repr__()
+
+    def __iter__(self):
+        return self.data_frame.__iter__()
