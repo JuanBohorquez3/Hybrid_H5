@@ -7,6 +7,21 @@ import matplotlib.pyplot as plt
 
 from Iterations import Iterations
 
+
+def _fix_nd_indexing(data: ndarray):
+    """
+    Fix indexing for a data array that can be indexed [iteration] instead of [iteration, shot]
+    Args:
+        data : 1D data array indexed [iteration]
+
+    Returns:
+        fixed_data : 2D data array indexed [iteration,shot] where the shot axis is of length 1
+    """
+    fixed_data = zeros((len(data),1))
+    fixed_data[:, 0] = data
+    return fixed_data
+
+
 def default_plotting(
         iterations: Iterations,
         data: ndarray,
@@ -27,16 +42,23 @@ def default_plotting(
             plot
     Args:
         iterations: Iterations class holding this experiment's relevant data
-        data: ndarray of data to be plotted. Must be indexed [iteration,shot] with dimensions:
-            (iterations, shots)
-        data_error: ndarray of uncertainty in data. Must be indexed [iteration,shot] with dimensions:
-            (iterations, shots)
+        data: ndarray of data to be plotted. Can be indexed [iteration,shot] or [iteration] if
+            shots = 1.
+        data_error: ndarray of uncertainty in data. Must be indexed [iteration,shot] or
+            [iteration] if shots = 1
         shots: number of shots taken per measurement. If not specified only the first shot is
             plotted
         description: description of data to be plotted (used for plot title)
     """
     # Set default
-    data_error = zeros(size(data), dtype=float) if data_error is None else data_error
+    data_error = zeros(data.shape, dtype=float) if data_error is None else data_error
+
+    # Fix data and data_error indexing if necessary
+    if data.shape != data_error.shape:
+        raise ValueError("data and data error must have the same shape")
+    if len(data.shape) == 1:
+        data = _fix_nd_indexing(data)
+        data_error = _fix_nd_indexing(data_error)
 
     if len(iterations.keys()) == 1:
         for shot in range(shots):
@@ -52,27 +74,30 @@ def default_plotting(
         ax.set_xlabel(independent_variable)
         fig.show()
     elif len(iterations.keys()) == 3:
-        fig, axarr = plt.subplots(1, 2, figsize=(2 * 5, 5))
+        fig, axarr = plt.subplots(1, shots, figsize=(shots * 5, 5))
         extent = [
             min(iterations[iterations.ivars[1]] - iterations.step_sizes[1]/2),  # left
             max(iterations[iterations.ivars[1]] + iterations.step_sizes[1]/2),  # right
             max(iterations[iterations.ivars[0]] + iterations.step_sizes[0]/2),  # bottom
             min(iterations[iterations.ivars[0]] - iterations.step_sizes[0]/2)   # top
         ]
+        if shots == 1:
+            axarr = [axarr]
         for shot in range(shots):
             means_nd = iterations.fold_to_nd(data[:, shot])
             im = axarr[shot].imshow(means_nd, interpolation='none', aspect='auto', extent=extent)
             fig.colorbar(im, ax=axarr[shot], use_gridspec=True, shrink=.7)
             axarr[shot].set_xlabel(iterations.ivars[1])
             axarr[shot].set_ylabel(iterations.ivars[0])
-            axarr[shot].set_title(f"Shot {shot}")
+            if shots - 1:
+                axarr[shot].set_title(f"Shot {shot}")
             axarr[shot].set_xticks(round_(iterations[iterations.ivars[1]], 2), )
             axarr[shot].set_yticks(round_(iterations[iterations.ivars[0]], 2))
-        fig.tight_layout()
+        # fig.tight_layout()
         fig.suptitle(description)
         fig.show()
     else:
-        print("many axes, look for purpose made cells")
+        print("too many axes, look for purpose made cells")
 
 
 def iterate_plot_2D(
@@ -96,7 +121,16 @@ def iterate_plot_2D(
         description : description of data, put on y-axis of plots
         shots : number of shots specified in data
     """
-    # TODO : create function to allow data indexed [iteration] when shots == 1
+    # Set default
+    data_error = zeros(data.shape, dtype=float) if data_error is None else data_error
+
+    # Fix data and data_error indexing if necessary
+    if data.shape != data_error.shape:
+        raise ValueError("data and data error must have the same shape")
+    if len(data.shape) == 1:
+        data = _fix_nd_indexing(data)
+        data_error = _fix_nd_indexing(data_error)
+
     if len(iterations.ivars) != 2:
         raise ValueError(
             "This plot only works to plot data from an experiment with two independent variables")
