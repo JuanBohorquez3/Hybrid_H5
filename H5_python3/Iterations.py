@@ -32,12 +32,13 @@ class Iterations:
         if not isinstance(results_file, h5py.File):
             raise TypeError("Results file must be valid HDF5 file")
         self.__results = results_file
-        self.__independent_variables: OrderedDict = self.get_independent_variables()
+        self.__independent_variables: OrderedDict = self._get_independent_variables()
         self.ivars: List[str] = sorted(list(self.__independent_variables.keys()))
-        self.data_frame: pd.DataFrame = self.load_df()
+        self.data_frame: pd.DataFrame = self._load_df()
 
-        # A few attributes to better mimic the behavior of a dataframe
-        self.loc = self.data_frame.loc
+    @property
+    def loc(self):
+        return self.data_frame.loc
 
     @property
     def results(self) -> h5py.File:
@@ -58,7 +59,7 @@ class Iterations:
         return self.__independent_variables
 
     @property
-    def step_sizes(self) -> Tuple[float]:
+    def _step_sizes(self) -> Tuple[float]:
         """
         Returns:
             the step size of each independent variable in this experiment, assuming even spacing
@@ -84,7 +85,7 @@ class Iterations:
         """
         return {name: iteration[f"variables/{name}"][()] for name in ivar_names}
 
-    def get_independent_variables(self):
+    def _get_independent_variables(self):
         """
         Finds the independent variables that were varied this experiment and puts them in a
         dictionary
@@ -104,7 +105,7 @@ class Iterations:
                     indep_vars.update({variable[0]: array(values)})
         return OrderedDict(sorted(indep_vars.items()))
 
-    def load_df(self) -> pd.DataFrame:
+    def _load_df(self) -> pd.DataFrame:
         """
         Loads a data frame mapping independent variable values to iteration number.
         Keys should be sorted alphabetically.
@@ -158,14 +159,14 @@ class Iterations:
     def __str__(self):
         return str(self.data_frame)
 
+    def __repr__(self):
+        return self.data_frame.__repr__()
+
     def items(self):
         return self.data_frame.items()
 
     def iterrows(self):
         return self.data_frame.iterrows()
-
-    def __repr__(self):
-        return self.data_frame.__repr__()
 
     def __iter__(self):
         return self.data_frame.__iter__()

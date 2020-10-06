@@ -76,10 +76,10 @@ def default_plotting(
     elif len(iterations.keys()) == 3:
         fig, axarr = plt.subplots(1, shots, figsize=(shots * 5, 5))
         extent = [
-            min(iterations[iterations.ivars[1]] - iterations.step_sizes[1]/2),  # left
-            max(iterations[iterations.ivars[1]] + iterations.step_sizes[1]/2),  # right
-            max(iterations[iterations.ivars[0]] + iterations.step_sizes[0]/2),  # bottom
-            min(iterations[iterations.ivars[0]] - iterations.step_sizes[0]/2)   # top
+            min(iterations[iterations.ivars[1]] - iterations._step_sizes[1] / 2),  # left
+            max(iterations[iterations.ivars[1]] + iterations._step_sizes[1] / 2),  # right
+            max(iterations[iterations.ivars[0]] + iterations._step_sizes[0] / 2),  # bottom
+            min(iterations[iterations.ivars[0]] - iterations._step_sizes[0] / 2)   # top
         ]
         if shots == 1:
             axarr = [axarr]
