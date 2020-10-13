@@ -364,7 +364,7 @@ def cut_err_gauss(
     # uncertainty in derived a, b, c parameters we feed to the quadratic formula
     da = 2*(dstd1/std1**3-dstd2/std2**3)
     db = -2*(-dmu1/std1**2+dmu2/std2**2+2*dstd1*mu1/std1**3-2*dstd2*mu2/std2**3)
-    dc = 2*(dmu1*mu1/std1**2+dmu2*mu2/std2**2+dstd1*(mu1**2/std1**3-1/std1**2)+dstd2*(
+    dc = 2*(-dmu1*mu1/std1**2+dmu2*mu2/std2**2+dstd1*(mu1**2/std1**3-1/std1**2)+dstd2*(
             -mu2**2/std2**3+1/std2**2)+da1/a1-da2/a2)
 
     inva = 1/a

@@ -1,0 +1,153 @@
+\documentclass{article}
+\usepackage[utf8]{inputenc}
+
+\title{Poisson, Gauss Fits and Cuts}
+\author{Juan Camilo Bohorquez }
+\date{October 2020}
+
+\begin{document}
+
+\maketitle
+
+\section{Intro}
+
+During our experimental cycle we use the presence (or absence) of an atom within our trap as the main metric for understanding it's state.
+
+We measure an atom's presence by illuminating the trap with near-resonant beams along a cycling transition for an integration time $T$. In our experiment these are two 852nm beams near resonant a cycling transition on the D2 line, along with a repumper to ensure the atoms stay within the cycling manifold.
+\begin{itemize}
+    \item Cycling Transition $6S_{1/2}F=4 \rightarrow 6P_{3/2}F'=5$
+    \item Repumping Transition $6S_{1/2}F=3 \rightarrow 6P_{3/2}F'=4$
+\end{itemize}
+
+We refer to this as a readout pulse, or a readout phase.
+
+During the readout phase our photon detecting instrument (either a photon counter or a very sensitive camera) will collect some of the atomic fluorescence, as well as some photons from background sources. 
+
+We then determine whether an atom was present in the trap during readout by applying a cutoff we refer to as a cut, $n_c$. If the number of collected photons is below $n_c$ during a readout pulse, we label that pulse as having no atoms in the trap, otherwise that pulse as having had an atom in the trap.
+
+With the set of functions in FittingH5.py we are interested in characterizing our readout by understanding the modeling parameters that best fit our photon counting data, and from those parameters establishing the best possible cut. We also want to know our uncertainty in that choice of cut, as well as the error rate in our discrimination.
+
+\section{Photon counting probability distributions}
+
+The methodology for photon counting and analysis of our data is to run experiments were many (hundreds) of measurements where readout pulses are performed under the same condition. Then number of photon counts detected during each of those measurements is then considered a data point. We plot all of those data points together in a histogram, then fit that histogram to a curve we expect to describe the behavior we measured.
+
+\subsection{Poisson Distributions}
+
+Photon counting is a Poisson process, and the photon counting statistics therefore follow a Poisson distribution.
+
+In our case the Poisson distribution describes the probability that a number of photons $n$ are counted at the detector, when there is an expected number of photons $\mu$ that does not vary over the course of the experiment.
+
+This probability distribution is:
+\[P_{\mu}(n) = \frac{\mu^n e^{-\mu}}{n!}\]
+And can be generalized to be continuous using the gamma function $\Gamma(x)$.
+\[P_{\mu}(x) = \frac{\mu^x e^{-\mu}}{\Gamma(x+1)}\]
+
+The distinction between the 0 atom case and the 1 atom  case is the expected number of photons, $\mu$.
+
+In the case where there are no atoms in the trap, $\mu_0$ is determined by a variety of noise process.
+\begin{enumerate}
+    \item Electrical and Thermal noise on the detector
+    \item Background photons from sources other than atomic fluorescence 
+\end{enumerate}
+
+In the case where there is an atom in the trap, $\mu_1$ is determined by the sum of the background counts, and the counts due to atomic fluorescence.
+
+Thus $\mu_1 > \mu_0$ for all of our experiments.
+
+In the regime where a Poisson distribution is a convenient model, we fit our histogram to a double Poisson distribution. There we have two weighted Poisson curves corresponding to the photon counts from readouts where there was no atom in the trap and readout where there was an atom in the trap.
+
+\[P_{\mu_0,\mu_1}(x) = a_0\frac{\mu_0^x e^{-\mu_0}}{\Gamma(x+1)}+a_1\frac{\mu_1^x e^{-\mu_1}}{\Gamma(x+1)}\]
+
+Where:
+\begin{itemize}
+    \item $a_0, a_1$ correspond to the number of readouts with 0 or 1 atoms in the trap, respectively
+    \item $\mu_0, \mu_1$ correspond to the expected number of photons in the case where there were 0 or 1 atoms in the trap, respectively.
+\end{itemize}
+
+
+\subsection{Gaussian Distributions}
+In the case of large $\mu$ computing a Poisson distribution is often impossible with floating point numbers. Thus we make use of the fact that Poisson distribution can be approximated to a normal distribution (Gaussian) in this limit. With a standard deviation of $\sigma = \sqrt{\mu}$
+
+\[P_{\mu,\sigma}(x) = \frac{1}{\sigma\sqrt{2\pi}}e^{-1/2\left(\frac{x-\mu}{\sigma}\right)^2}\]
+
+This distribution is characterized by
+\begin{itemize}
+    \item $\mu$ a mean or expected value
+    \item $\sigma$ a standard deviation
+\end{itemize}
+
+If our counting statistics are in this limit, we fit our photon counting histogram to a double Gaussian function
+
+\[P_{\mu_0,\mu_1,\sigma_0,\sigma_1}(x) = \frac{a_0}{\sigma_0\sqrt{2\pi}}e^{-1/2\left(\frac{x-\mu_0}{\sigma_0}\right)^2}+\frac{a_1}{\sigma_1\sqrt{2\pi}}e^{-1/2\left(\frac{x-\mu_1}{\sigma_1}\right)^2}\]
+
+\section{Determining Cuts}
+
+We want to use the fit parameters from above to determine the optimal cut. We can consider a cut optimal if it minimizes the error in labeling a measurement as having had 0 or 1 atoms.
+
+We identify our error rate in labeling as follows:
+Error rate from false positives:
+\[ E_p = a'_0\int_{n_c}^\infty P_0(x)dx\]
+Error rate from false negatives
+\[ E_n = a'_1\int_{-\infty}^{n_c} P_1(x)dx\]
+Total Error Rate:
+\[ E = a'_0\int_{n_c}^\infty P_0(x)dx + a'_1\int_{-\infty}^{n_c} P_1(x)dx\]
+
+Where $P_i(x)$ is the probability density function for detecting $x$ photons, given $i$ atoms in the trap, and $a'_0$, and $a'_1$ are the normalized weights in our distribution:
+
+$$a'_i \equiv \frac{a_i}{a_0+a_1}$$
+
+We optimize the Error rate by minimizing it with respect to $n_c$
+
+\[\frac{dE}{dn_c}(n_c = n_{opt}) = 0\]
+and we find the relation:
+\[ a_0 P_0(n_{opt}) = a_1 P_1(n_{opt})\]
+
+Thus, we just have to find the intercept of the (weighted) functions to find the optimal cut between them.
+
+\subsection{Optimal Cut for Poisson Discrimination}
+If we model our photon collection as a Poisson process, then we have to solve the following equation for n:
+
+\[ a_0\frac{\mu_0^{n_c} e^{-\mu_0}}{n_c!} = a_1\frac{\mu_1^{n_c} e^{-\mu_1}}{n_c!} \]
+Which gives us
+\[n_c = \frac{ln(\frac{a_1}{a_0})+\mu_0-\mu_1}{ln(\frac{\mu_1}{\mu_2})}\]
+
+\subsection{Optimal Cut for Gaussian Distribution}
+
+Given our two Gaussian curves we have to solve the following equation for n:
+\[\frac{a_0}{\sigma_0\sqrt{2\pi}} e^{-1/2(\frac{n_c-\mu_0}{\sigma_0})^2} = \frac{a_1}{\sigma_1\sqrt{2\pi}} e^{-1/2(\frac{n_c-\mu_1}{\sigma_1})^2} \]
+
+Which can be solved using the quadratic formula:
+\[n_c = \frac{-b\pm \sqrt{b^2-4ac}}{2a}\]
+  
+Where:
+\[a = \frac{1}{\sigma_1^2} - \frac{1}{\sigma_0^2}\]
+\[b = -2\left(\frac{\mu_1}{\sigma_1^2} -\frac{\mu_0}{\sigma_0^2}\right)\]
+\[c = \left(\frac{\mu_1}{\sigma_1}\right)^2-\left(\frac{\mu_0}{\sigma_0}\right)^2+2\left(ln\left(\frac{a_0}{a_1}\right)-ln\left(\frac{\sigma_0}{\sigma_1}\right)\right)\]
+
+We choose the solution which falls in between our means. That is $\mu_0 < n_c \mu_1$. For an arbitrary set of parameters for these Gaussian functions, there is no guarantee than an intercept will fall between the means, but the assumption here is that there is some hope of labeling the measurements with decent fidelity, and in that regime there will always be one such intercept.
+
+\section{Error analysis on optimal cuts}
+Our optimal cuts above are derived from fitting parameters fit to (often) noisy counter data. As such there is an uncertainty in each of those fitting parameters, provided by the fitting functions we use.
+
+Because of those uncertainties we can assume that there will be an uncertainty in the derived value, $n_c$. We can deduce the uncertainty we have in our cut by applying the following principle
+
+For a property that is a function of set of variables $F(v_1,v_2,v_3...)$, with some uncertainties $\Delta v_1, \Delta v_2, \Delta v_3 ...$, we can estimate the uncertainty (to first order) as:
+\[ \Delta F = \Delta v_1 \frac{\partial F}{\partial v_1} + \Delta v_2 \frac{\partial F}{\partial v_2} + \Delta v_3 \frac{\partial F}{\partial v_3} + ...\]
+
+\subsection{Uncertainty in Poisson Cut}
+
+In the case of the double Poisson fit we can use the above formula to find:
+\[ \Delta n_c = \frac{1}{log\left(\frac{\mu_0}{\mu_1}\right)} \left(\frac{\Delta a_1}{a_1} - \frac{\Delta a_0}{a_0} + (\Delta\mu_0-\Delta\mu_1)\left(1-\frac{1}{log\left(\frac{\mu_0}{\mu_1}\right)}\right)\right)\]
+
+\subsection{Uncertainty in Gaussian Cut}
+
+In this case it's easier to find the uncertainty in our parameters $a$, $b$, and $c$ as a function of the fit parameters, then use those uncertainties to find the uncertainty in the cut.
+
+\[\Delta n_c = \frac{1}{a}\left(\Delta a \left(\frac{-b\pm Q}{a}\mp 2\frac{c}{Q}\right) +\Delta b \left(-1\pm \frac{b}{Q}\right) \mp 2\Delta c \frac{a}{Q}\right)\]
+Where we define Q as the discriminant
+$Q \equiv \sqrt{b^2-4ac}$
+
+\[\Delta a = 2\left(\frac{\Delta\sigma_0}{\sigma_0^3}-\frac{\Delta\sigma_1}{\sigma_1^3}\right)\]
+\[\Delta b = -2\left(\frac{\Delta\mu_1}{\sigma_1^2}-\frac{\Delta\mu_0}{\sigma_0^2}+2\Delta \sigma_0\frac{\mu_0^2}{\sigma_0^3}-2\Delta \sigma_1\frac{\mu_1^2}{\sigma_1^3}\right)\]
+\[ \Delta c = 2\left(\Delta \mu_1 \frac{\mu_1}{\sigma_1^2}-\Delta \mu_0 \frac{\mu_0}{\sigma_0^2}+\Delta \sigma_0\left(\frac{\mu_0^2}{\sigma_0^3}-\frac{1}{\sigma_0^2} \right) - \Delta \sigma_1\left(\frac{\mu_1^2}{\sigma_1^3}-\frac{1}{\sigma_1^2} \right) + \frac{\Delta a_0}{a_0}- \frac{\Delta a_1}{a_1}\right)\]
+\end{document}
