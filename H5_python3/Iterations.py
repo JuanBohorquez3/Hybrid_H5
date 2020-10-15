@@ -123,7 +123,7 @@ class Iterations:
         # Sort the dataframe indeces by values if independent variables (not iteration number) so
         # operations can be performed somewhat intuitively  TODO : Document this better
         # breaks with 1 iteration
-        if len(iteration) == 2:
+        if len(self) == 1:
             return df
         else:
             return df.sort_values(self.ivars[::-1], kind="mergesort", ignore_index=True)
