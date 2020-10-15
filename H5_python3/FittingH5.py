@@ -362,18 +362,20 @@ def cut_err_gauss(
     ]
 
     # uncertainty in derived a, b, c parameters we feed to the quadratic formula
-    da = 2*(dstd1/std1**3-dstd2/std2**3)
-    db = -2*(-dmu1/std1**2+dmu2/std2**2+2*dstd1*mu1/std1**3-2*dstd2*mu2/std2**3)
-    dc = 2*(-dmu1*mu1/std1**2+dmu2*mu2/std2**2+dstd1*(mu1**2/std1**3-1/std1**2)+dstd2*(
-            -mu2**2/std2**3+1/std2**2)+da1/a1-da2/a2)
+    da = 2 * (dstd1 / std1 ** 3 - dstd2 / std2 ** 3)
+    db = -2 * (
+                -dmu1 / std1 ** 2 + dmu2 / std2 ** 2 + 2 * dstd1 * mu1 / std1 ** 3 - 2 * dstd2 * mu2 / std2 ** 3)
+    dc = 2 * (-dmu1 * mu1 / std1 ** 2 + dmu2 * mu2 / std2 ** 2 + dstd1 * (
+                mu1 ** 2 / std1 ** 3 - 1 / std1 ** 2) + dstd2 * (
+                      -mu2 ** 2 / std2 ** 3 + 1 / std2 ** 2) + da1 / a1 - da2 / a2)
 
-    inva = 1/a
-    q = sqrt(b**2-4*a*c)  # discriminant
+    inva = 1 / a
+    q = sqrt(b ** 2 - 4 * a * c)  # discriminant
 
     # cut uncertainty in plus case
-    dp = inva*(da*((q-b)/a-2*c/q)+db*(-1+b/q)-dc*2*a/q)
+    dp = inva * (da * (-(-b + q) / a - 2 * c / q) + db * (-1 + b / q) - dc * 2 * a / q)
     # cut uncertainty in minus case
-    dn = inva*(da*((-q-b)/a+2*c/q)+db*(-1-b/q)+dc*2*a/q)
+    dn = inva * (da * (-(-b - q) / a + 2 * c / q) + db * (-1 - b / q) + dc * 2 * a / q)
 
     if mu1 < intercepts[0] < mu2:
         return dp
