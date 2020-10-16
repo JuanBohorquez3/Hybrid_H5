@@ -5,6 +5,7 @@ from scipy.special import gamma, erf
 from scipy import integrate
 
 
+# Probability and Statistics  ----------------------------------------------------------------------
 def shot_error(probability: float, samples: int):
     """
     Args:
@@ -32,7 +33,7 @@ def gaussian(x: Union[float, ndarray], mu: float, std: float, a: float) -> Union
     Returns:
         value(s) of the gaussian distribution at x
     """
-    # print(f"mu = {mu}\nstd = {std}\na = {a}")
+
     return a * exp(-((x - mu) / (sqrt(2) * std)) ** 2) / (std * sqrt(2 * pi))
 
 
@@ -99,15 +100,65 @@ def double_poisson(x: Union[float, ndarray], mu1: float, mu2: float, a1: float, 
     return poisson(x, mu1, a1) + poisson(x, mu2, a2)
 
 
-# TODO : Write up short LaTeX doc on the derivation of these functions
 # Functions to find cuts, and understand errors due to overlaps, and choices in cut ----------------
-def gauss_intercept(
+def gauss_intercepts(
         mu1: float,
         mu2: float,
         std1: float,
         std2: float,
         a1: float,
-        a2: float) -> float:
+        a2: float) -> Tuple[float, float, float, float, float]:
+    """
+    Intercepts between two gaussian distributions
+
+    This function returns the numerical solution to the equation:
+    > gauss(x,mu1,std1,a1) = gauss(x,mu2,std2,a2)
+    for x.
+
+    That solution is found analytically, with the solution in terms of the quadratic formula:
+    (-b + sgn * sqrt( b ** 2 - 4 * a * c )) / (2 * a)
+    where sgn takes the values +1 or -1, and 'a', 'b', and 'c' are computed explicitly.
+
+    This function returns both intercepts as well as the 'a', 'b', and 'c' parameters of the
+    quadratic formula above.
+
+    Args:
+        mu1 : mean/center of the first distribution
+        mu2 : mean/center of the second distribution
+        std1 : standard deviation of the first distribution
+        std2 : standard deviation of the second distribution
+        a1 : amplitude of the first distribution. If a1 == 1 the distribution is a normalized
+            probability distribution
+        a2 : amplitude of the second distribution. If a1 == 1 the distribution is a normalized
+            probability distribution
+
+    Returns:
+        tuple(intecept1, intercept2, a, b, c)
+            intercepts: value of the intercepts of the two distributions
+            a: value of 'a' parameter of quadratic formula
+            b: value of 'b' parameter of quadratic formula
+            c: value of 'c' parameter of quadratic formula
+    """
+    a: float = 1 / std2 ** 2 - 1 / std1 ** 2
+    b: float = -2 * (mu2 / std2 ** 2 - mu1 / std1 ** 2)
+    c: float = (mu2 / std2) ** 2 - (mu1 / std1) ** 2 + 2 * (log(a1 / a2) - log(std1 / std2))
+
+    intercepts = (
+        (-b + sqrt(b ** 2 - 4 * a * c)) / (2 * a),  # plus case
+        (-b - sqrt(b ** 2 - 4 * a * c)) / (2 * a)   # minus case
+    )
+
+    return intercepts[0], intercepts[1], a, b, c
+
+
+def gauss_cut(
+        mu1: float,
+        mu2: float,
+        std1: float,
+        std2: float,
+        a1: float,
+        a2: float,
+        intercepts: Tuple[float, float] = None) -> Tuple[float, int]:
     """
     Intercept between two gaussian distributions
 
@@ -121,26 +172,29 @@ def gauss_intercept(
             probability distribution
         a2 : amplitude of the second distribution. If a1 == 1 the distribution is a normalized
             probability distribution
+        intercepts : pre-computed intercepts
 
     Returns:
-        value of the intercept of the two distributions
-    """
-    a: float = 1 / std2 ** 2 - 1 / std1 ** 2
-    b: float = -2 * (mu2 / std2 ** 2 - mu1 / std1 ** 2)
-    c: float = (mu2 / std2) ** 2 - (mu1 / std1) ** 2 + 2 * (log(a1 / a2) - log(std1 / std2))
+        cut : float, value of the intercept between the two distributions
+            sgn : sign chosen in the quadratic formula
 
-    intercepts = [
-        (-b + sqrt(b ** 2 - 4 * a * c)) / (2 * a),
-        (-b - sqrt(b ** 2 - 4 * a * c)) / (2 * a)
-    ]
-
+    Raises:
+        ValueError: If neither of the two intercepts is inbetween mu1 or mu2
     """
-    There are two solutions to the equation, two places where the curves intercept. 
-    When discrimination between distributions related to loading 0 and 1 atom is feasible, exactly 
-    one of those intercepts will be between mu1 and mu2. The code bellow picks that choice out then 
-    returns that intercept.
-    """
-    return list(filter(lambda x: mu1 < x < mu2, intercepts))[0]
+    try:
+        if intercepts is None:
+            intercepts = gauss_intercepts(mu1, mu2, std1, std2, a1, a2)
+        cut = list(filter(
+            lambda x: mu1 < x < mu2,
+            intercepts
+        ))[0]
+        sgn = 1 if cut == intercepts[0] else -1
+    except IndexError:
+        raise ValueError(
+            "Neither intercept is within acceptable range, you have bigger problems than this error"
+        )
+    else:
+        return cut, sgn
 
 
 def gauss_discrimination_error(
@@ -211,8 +265,8 @@ def gauss_overlap(
     Returns:
         fractional error discriminating between two peaks given a cut
     """
-    intercept = gauss_intercept(mu1, mu2, std1, std2, a1, a2)
-    return gauss_discrimination_error(intercept, mu1, mu2, std1, std2, a1, a2)
+    cut, sgn = gauss_cut(mu1, mu2, std1, std2, a1, a2)
+    return gauss_discrimination_error(cut, mu1, mu2, std1, std2, a1, a2)
 
 
 def poisson_intercept(mu1: float, mu2: float, a1: float, a2: float) -> \
@@ -297,6 +351,10 @@ def cut_err_poisson(mu1: float,
                     ) -> float:
     """
     Uncertainty in the cut value derived for discriminating between two poisson distributions
+
+    Specifics on this computation are contained in
+        H5_python3/Documentation/Gauss_and_Poisson_fit_functions.pdf
+
     Args:
         mu1 : mean/center of the first distribution
         mu2 : mean/center of the second distribution
@@ -330,6 +388,10 @@ def cut_err_gauss(
 ) -> float:
     """
     Uncertainty in the cut value derived for discriminating between two gaussian distributions
+
+    Specifics on this computation are contained in
+        H5_python3/Documentation/Gauss_and_Poisson_fit_functions.pdf
+
     Args:
         mu1 : mean/center of the first distribution
         mu2 : mean/center of the second distribution
@@ -351,15 +413,10 @@ def cut_err_gauss(
     Returns:
         uncertainty in the cut value
     """
-    # values we use in the quadratic formula
-    a: float = 1 / std2 ** 2 - 1 / std1 ** 2
-    b: float = -2 * (mu2 / std2 ** 2 - mu1 / std1 ** 2)
-    c: float = (mu2 / std2) ** 2 - (mu1 / std1) ** 2 + 2 * (log(a1 / a2) - log(std1 / std2))
 
-    intercepts = [
-        (-b + sqrt(b ** 2 - 4 * a * c)) / (2 * a),
-        (-b - sqrt(b ** 2 - 4 * a * c)) / (2 * a)
-    ]
+    intercept_p, intercept_m, a, b, c = gauss_intercepts(mu1, mu2, std1, std2, a1, a2)
+
+    cut, sgn = gauss_cut(mu1, mu2, std1, std2, a1, a2, intercepts=(intercept_p, intercept_m))
 
     # uncertainty in derived a, b, c parameters we feed to the quadratic formula
     da = 2 * (dstd1 / std1 ** 3 - dstd2 / std2 ** 3)
@@ -372,17 +429,7 @@ def cut_err_gauss(
     inva = 1 / a
     q = sqrt(b ** 2 - 4 * a * c)  # discriminant
 
-    # cut uncertainty in plus case
-    dp = inva * (da * (-(-b + q) / a - 2 * c / q) + db * (-1 + b / q) - dc * 2 * a / q)
-    # cut uncertainty in minus case
-    dn = inva * (da * (-(-b - q) / a + 2 * c / q) + db * (-1 - b / q) + dc * 2 * a / q)
+    # cut uncertainty
+    dcut = inva * (da * (-(-b + sgn * q) / a - sgn * 2 * c / q) + db * (-1 + sgn * b / q) - sgn * dc * 2 * a / q)
 
-    if mu1 < intercepts[0] < mu2:
-        return dp
-    elif mu1 < intercepts[1] < mu2:
-        return dn
-    else:
-        raise ValueError(
-            "Neither intercept is within acceptable range, you have bigger problems than this error"
-        )
-
+    return abs(dcut)
