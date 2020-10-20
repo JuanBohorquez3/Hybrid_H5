@@ -315,8 +315,8 @@ def poisson_discrimination_error(xc: float, mu1: float, mu2: float, a1: float, a
     a1 = a1 / (a1 + a2)
     a2 = a2 / (a1 + a2)
 
-    err_low_curve = integrate.quad(lambda x: poisson(x, mu1, a1), xc, inf)
-    err_high_curve = integrate.quad(lambda x: poisson(x, mu2, a2), 0, xc)
+    err_low_curve = integrate.quad(lambda x: poisson(x, mu1, a1), xc, mu1+10*sqrt(mu1))
+    err_high_curve = integrate.quad(lambda x: poisson(x, mu2, a2), 0.0001, xc)
     return err_low_curve[0] + err_high_curve[0]
 
 
