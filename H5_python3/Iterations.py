@@ -147,7 +147,7 @@ class Iterations:
             # but important when they were not
             data_array = data_array[array(self.data_frame['iteration'], dtype=int)]
         return data_array.reshape(
-            *[len(vals) for var, vals in self.__independent_variables.items()]
+            *[len(vals) for var, vals in self.__independent_variables.items().__reversed__()]
         ).T
 
 # Wrapping utility functions

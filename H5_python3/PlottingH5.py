@@ -62,7 +62,7 @@ def default_plotting(
 
     if len(iterations.keys()) == 1:
         for shot in range(shots):
-            print(f"shot {shot} {description} : {data[0, shot]} +/- {data_error[0, shot]}")
+            print(f"shot {shot} {description} : {data[0, shot]:.3f} +/- {data_error[0, shot]:.3f}")
     elif len(iterations.keys()) == 2:
         independent_variable = list(iterations.keys())[1]
         xlin = iterations[independent_variable]
@@ -76,10 +76,10 @@ def default_plotting(
     elif len(iterations.keys()) == 3:
         fig, axarr = plt.subplots(1, shots, figsize=(shots * 5, 5))
         extent = [
-            min(iterations[iterations.ivars[1]] - iterations._step_sizes[1] / 2),  # left
-            max(iterations[iterations.ivars[1]] + iterations._step_sizes[1] / 2),  # right
-            max(iterations[iterations.ivars[0]] + iterations._step_sizes[0] / 2),  # bottom
-            min(iterations[iterations.ivars[0]] - iterations._step_sizes[0] / 2)   # top
+            min(iterations[iterations.ivars[1]] - iterations._step_sizes[0] / 2),  # left
+            max(iterations[iterations.ivars[1]] + iterations._step_sizes[0] / 2),  # right
+            max(iterations[iterations.ivars[0]] + iterations._step_sizes[1] / 2),  # bottom
+            min(iterations[iterations.ivars[0]] - iterations._step_sizes[1] / 2)   # top
         ]
         if shots == 1:
             axarr = [axarr]
@@ -91,8 +91,8 @@ def default_plotting(
             axarr[shot].set_ylabel(iterations.ivars[0])
             if shots - 1:
                 axarr[shot].set_title(f"Shot {shot}")
-            axarr[shot].set_xticks(round_(iterations[iterations.ivars[1]], 2), )
-            axarr[shot].set_yticks(round_(iterations[iterations.ivars[0]], 2))
+            axarr[shot].set_xticks(round_(array(iterations[iterations.ivars[1]]).astype(float), 2), )
+            axarr[shot].set_yticks(round_(array(iterations[iterations.ivars[0]]).astype(float), 2))
         # fig.tight_layout()
         fig.suptitle(description)
         fig.show()
