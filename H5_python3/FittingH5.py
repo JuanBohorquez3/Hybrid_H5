@@ -1,8 +1,13 @@
 import math
 from numpy import *
-from typing import Union, Tuple
+from typing import Union, Tuple, Callable, List
 from scipy.special import gamma, erf
 from scipy import integrate
+from scipy.optimize import curve_fit
+import matplotlib.pyplot as plt
+
+from Iterations import Iterations
+from PlottingH5 import _fix_nd_indexing
 
 
 # Probability and Statistics  ----------------------------------------------------------------------
@@ -17,7 +22,186 @@ def shot_error(probability: float, samples: int):
     return sqrt(probability*(1-probability)/samples)
 
 
+# Functions to fit  --------------------------------------------------------------------------------
+def iterate_fit_2D(
+        iterations: Iterations,
+        data: ndarray,
+        func: Callable,
+        guess: List[float],
+        data_error: ndarray = None,
+        x_ivar: str = None,
+        shots: int = 2,
+) -> Tuple[ndarray,ndarray]:
+    """
+    Iterates over a 2D experiment, choosing one independent variable as an x-axis, fitting each
+    y-axis to func.
+
+
+    the values of x_ivar are places on the x-axis of each plot.
+    Args:
+        iterations : Iterations object containing relevant experiment information
+        data : data array, indexed [iteration,shot]
+        func : function to fit to
+        guess : initial guess for fitting parameters
+        data_error : uncertainty in data, indexed [iteration,shot]
+        x_ivar : independent variable to place on x-axis. If not specified the user is prompted to
+            choose one when this code is run
+        shots : number of shots specified in data
+    Returns:
+        popts, perrs :
+            popts : list of fitting parameters. Indexed [y_value_index, shot, parameter]
+            perrs : list of uncertainties in fitting parameters.
+                Indexed [y_value_index, shot, parameter]
+    """
+    # Set default
+    # data_error = zeros(data.shape, dtype=float) if data_error is None else data_error
+
+    # Fix data and data_error indexing if necessary
+    if data_error is not None and data.shape != data_error.shape:
+        raise ValueError("data and data error must have the same shape")
+    if len(data.shape) == 1:
+        data = _fix_nd_indexing(data)
+        data_error = _fix_nd_indexing(data_error) if data_error is not None else None
+
+    if len(iterations.ivars) != 2:
+        raise ValueError(
+            "This plot only works to plot data from an experiment with two independent variables")
+
+    if x_ivar is not None:
+        if x_ivar not in iterations.ivars:
+            raise KeyError(
+                f"{x_ivar} is not an independent variable of this experiment.")
+        x_ivar_ind = int(iterations.ivars[1] == x_ivar)
+    else:
+        # Prompt the user to input which independent variable is on the x-axis of each graph
+        ms = "Which Independent variable is on the x-axis? :\n"
+        for i, ivar in enumerate(iterations.ivars):
+            ms += f"\t{i}) : {ivar}\n"
+        while True:
+            try:
+                x_ivar_ind = int(input(ms))
+                x_ivar = iterations.ivars[x_ivar_ind]
+            except (ValueError, IndexError):
+                print(f"Not a valid input, input an int between 0 and {len(iterations.ivars) - 1}")
+                continue
+            else:
+                break
+
+    y_ivar = iterations.ivars[not (x_ivar_ind)]
+
+    popts = zeros((len(iterations.independent_variables[y_ivar]), shots, len(guess)), dtype=float)
+    perrs = zeros((len(iterations.independent_variables[y_ivar]), shots, len(guess)), dtype=float)
+
+    for shot in range(shots):
+        data_nd = iterations.fold_to_nd(data[:, shot])
+        error_nd = iterations.fold_to_nd(data_error[:, shot]) if data_error is not None else [None]*len(data_nd)
+        if not x_ivar_ind:  # Transpose the data array if the index is right, for convenience
+            data_nd = data_nd.T
+            error_nd = error_nd.T if data_error is not None else error_nd
+
+        x_vals = sorted(iterations.independent_variables[x_ivar])  # values taken on the x-axis
+        for i, data_vals in enumerate(data_nd):
+            data_ers = error_nd[i]
+            # value of the y_ivar for this run through the loop
+            y_val = sorted(iterations.independent_variables[y_ivar])[i]
+            popt, pcov = curve_fit(func, x_vals, data_vals, sigma=data_ers, p0 = guess)
+            perrs[i, shot, :] = sqrt(diag(pcov))
+            popts[i, shot, :] = popt
+
+    return popts, perrs
+
+
+def fit_and_plot_hist(func, counter_data, bns, guess, title="", plots=True):
+    hist, bin_edges = histogram(counter_data, bins=bns)
+    mids = (bin_edges[0:-1] + bin_edges[1:]) / 2
+    try:
+        popt, pcov = curve_fit(f=func, xdata=mids, ydata=hist, p0=guess)
+    except RuntimeError as e:
+        print(f"Unable to fit\n{e}")
+        popt = array(guess)
+        pcov = zeros((len(popt), len(popt)))
+        bad_fit = True
+    else:
+        bad_fit = False
+    perr = sqrt(diag(pcov))
+
+    if plots:
+        fig, ax = plt.subplots(1, 1, figsize=(8, 6))
+        xlin = linspace(min(counter_data), max(counter_data), 1000)
+        ax.hist(counter_data, bins=bns, histtype='step', label="Raw Data")
+        label = "Guess" if bad_fit else "Fit"
+        ax.plot(xlin, func(xlin, *popt), label=label)
+        ax.set_title(title.format(popt, perr))
+        ax.legend()
+        fig.tight_layout()
+        fig.show()
+    else:
+        fig, ax = (None, None)
+    return popt, pcov, perr, fig, ax
+
+
 # Functions useful for fitting  --------------------------------------------------------------------
+# Related to retention scans  ----------------------------------------------------------------------
+def exp_decay(x: float, a: float, Tau: float):
+    """
+    Exponential decay
+    Args:
+        x: time(s) to evaluate function
+        a: magnitude of decay
+        Tau: characteristic decay time
+
+    Returns:
+        a*exp(-x/Tau)
+    """
+    return a*exp(-x/Tau)
+
+
+def o_m_exp_decay(x: float, a: float, Tau: float):
+    """
+    One 1 exp decay
+    Args:
+        x: time(s) to evaluate function
+        a: magnitude of function
+        Tau: characteristic decay time
+
+    Returns:
+        a*(1-exp_decay(x, 1, Tau))
+    """
+    return a*(1-exp_decay(x, 1, Tau))
+
+
+def rabi_cos(x: float, freq: float, amp: float, offset: float, phi: float = pi):
+    """
+    Computes the probability of being in one of two states due to a Rabi Oscillation
+    Args:
+        x: time(s) to evaluate function
+        freq: rabi frequency of oscillation
+        amp: amplitude of oscillation
+        offset: oscillation of oscialltion from 0
+        phi: phase of oscillation, pi if starting in other state
+    Returns:
+        offset + amp*cos(freq * x / 2 + phi)**2
+    """
+    return offset + amp*cos(freq * x / 2 + phi)**2
+
+
+def lorenz(x: float, x0: float, fwhm: float, a: float, o: float) -> float:
+    """
+    Lorenzian function
+    Args:
+        x: frequency(s) to evaluate function
+        x0: center frequency of resonance
+        fwhm: full-width-half-max of resonance
+        a: amplitude of function
+        o: offset of function from 0
+
+    Returns:
+        o + a /((x-x0)**2 + (fwhm)**2)
+    """
+    return o + a / ((x-x0)**2 + (fwhm)**2)
+
+
+# Related to photon counting  ----------------------------------------------------------------------
 def gaussian(x: Union[float, ndarray], mu: float, std: float, a: float) -> Union[float, ndarray]:
     """
     Samples a gaussian distribution at position(s) x
@@ -433,3 +617,6 @@ def cut_err_gauss(
     dcut = inva * (da * (-(-b + sgn * q) / a - sgn * 2 * c / q) + db * (-1 + sgn * b / q) - sgn * dc * 2 * a / q)
 
     return abs(dcut)
+
+
+
