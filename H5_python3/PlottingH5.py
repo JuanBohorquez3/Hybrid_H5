@@ -66,6 +66,9 @@ def default_plotting(
     elif len(iterations.keys()) == 2:
         independent_variable = list(iterations.keys())[1]
         xlin = iterations[independent_variable]
+        # Sort data to match ordering of iterations dataframe
+        data = data[array(iterations['iteration'], dtype=int)]
+        data_error = data_error[array(iterations['iteration'], dtype=int)]
         fig, ax = plt.subplots(1, 1, figsize=(6, 5))
         for shot in range(shots):
             ax.errorbar(xlin, data[:, shot], yerr=data_error[:, shot], label=f"Shot {shot}")
@@ -76,10 +79,10 @@ def default_plotting(
     elif len(iterations.keys()) == 3:
         fig, axarr = plt.subplots(1, shots, figsize=(shots * 5, 5))
         extent = [
-            min(iterations[iterations.ivars[1]] - iterations._step_sizes[0] / 2),  # left
-            max(iterations[iterations.ivars[1]] + iterations._step_sizes[0] / 2),  # right
-            max(iterations[iterations.ivars[0]] + iterations._step_sizes[1] / 2),  # bottom
-            min(iterations[iterations.ivars[0]] - iterations._step_sizes[1] / 2)   # top
+            min(iterations[iterations.ivars[1]] - iterations._step_sizes[1] / 2),  # left
+            max(iterations[iterations.ivars[1]] + iterations._step_sizes[1] / 2),  # right
+            max(iterations[iterations.ivars[0]] + iterations._step_sizes[0] / 2),  # bottom
+            min(iterations[iterations.ivars[0]] - iterations._step_sizes[0] / 2)   # top
         ]
         if shots == 1:
             axarr = [axarr]
@@ -91,7 +94,7 @@ def default_plotting(
             axarr[shot].set_ylabel(iterations.ivars[0])
             if shots - 1:
                 axarr[shot].set_title(f"Shot {shot}")
-            axarr[shot].set_xticks(round_(array(iterations[iterations.ivars[1]]).astype(float), 2), )
+            axarr[shot].set_xticks(round_(array(iterations[iterations.ivars[1]]).astype(float), 2))
             axarr[shot].set_yticks(round_(array(iterations[iterations.ivars[0]]).astype(float), 2))
         # fig.tight_layout()
         fig.suptitle(description)
@@ -120,6 +123,8 @@ def iterate_plot_2D(
             choose one when this code is run
         description : description of data, put on y-axis of plots
         shots : number of shots specified in data
+    Returns:
+        fig, axarr: figure and axis array that was plotted
     """
     # Set default
     data_error = zeros(data.shape, dtype=float) if data_error is None else data_error
@@ -178,3 +183,23 @@ def iterate_plot_2D(
             axarr[i].legend()
     fig.tight_layout()
     fig.show()
+
+    return fig, axarr
+
+
+# misc utility functions  --------------------------------------------------------------------------
+def expand_iter_array(iterations, iter_array, no_measurements, no_shots):
+    """
+    Expands an array of len() == len(iterations) to an ndarray of the shape of shot-by-shot data.
+
+    An iter array is an array of shape = (len(iteration),), and is indexed [iteration].
+        The assumption being that it's an array containing iteration-by-iteration data.
+    An array with shot-by-shot data is indexed [iteration,measurement,shot]
+    """
+    if len(iter_array) != len(iterations):
+        raise ValueError("Iter arrays must have length of iterations")
+    fixed_array = ones((len(iterations), no_measurements, no_shots))
+    for i, row in iterations.iterrows():
+        iteration = row['iteration']
+        fixed_array[iteration] = iter_array[iteration] * fixed_array[iteration]
+    return fixed_array
