@@ -223,3 +223,30 @@ def load_data(results_file, roi: HMROI = None):
                     continue
 
     return hm_pix
+
+
+# Hamamatsu counts-photons calibrations
+def hamamatsu_count_calibration(counter_data, offset, EM_gain, analog_gain):
+    """
+    converts hamamatsu counting data to number of incident photons
+    Args:
+        counter_data : ndarray of camera counts
+        offset : couning offset
+        EM_gain : EM gain setting on the camera
+        analog_gain : analog gain setting on the camera
+    """
+    return (counter_data - offset) / (EM_gain * analog_gain)
+
+
+def hamamatsu_inv_calibration(counter_data, offset, EM_gain, analog_gain):
+    """
+    converts photon counting data to haamamtsu camera count data.
+
+    Inverse function of hamamatsu_count_calibration
+    Args:
+        counter_data : ndarray of camera counts
+        offset : couning offset
+        EM_gain : EM gain setting on the camera
+        analog_gain : analog gain setting on the camera
+    """
+    return (counter_data * EM_gain * analog_gain) + offset
