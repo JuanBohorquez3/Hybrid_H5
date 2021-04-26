@@ -28,13 +28,20 @@ class Iterations:
         data_frame : data frame indexed by iteration number, containing the values taken by each
             independent variable for that iteration
     """
-    def __init__(self, results_file: h5py.File):
-        if not isinstance(results_file, h5py.File):
+    def __init__(self, results_file: h5py.File = None, df=None):
+        if results_file is not None and not isinstance(results_file, h5py.File):
             raise TypeError("Results file must be valid HDF5 file")
+        if results_file is None and df is None:
+            raise ValueError("Either results_file or df must be specified")
+        if df is not None:
+            self.__results = None
+            self.data_frame: pd.DataFrame = df
         self.__results = results_file
         self.__independent_variables: OrderedDict = self._get_independent_variables()
         self.ivars: List[str] = sorted(list(self.__independent_variables.keys()))
-        self.data_frame: pd.DataFrame = self._load_df()
+        if df is None:
+            self.data_frame: pd.DataFrame = self._load_df()
+
 
     @property
     def loc(self):
@@ -96,9 +103,31 @@ class Iterations:
                 took.
                 Sorted alphabetically by keys
         """
+        def ivar_uniques(ivar_vals: ndarray) -> ndarray:
+            """
+            Finds unique values within an array, while preserving order (in which value first
+            appears).
+
+            numpy.unique and set() calls sort unique values, but the ordering of ivars is important
+                to maintain. The order of first appearance usually maps to the order
+                in which they are created in the results file
+            Args:
+                ivar_vals: an ndarray of values taken by an ivar
+            Returns:
+                unique values within ivar_vals, with their order preserved
+            """
+            vals = []
+            for val in ivar_vals:
+                if val not in vals:
+                    vals.append(val)
+            return array(vals)
 
         indep_vars = {}
-        if len(self.results['iterations']) > 1:
+        if self.results is None:
+            indep_vars = {
+                ivar: ivar_uniques(self.data_frame[ivar]) for ivar in self.data_frame if ivar != 'iteration'
+            }
+        elif len(self.results['iterations']) > 1:
             for variable in self.results['settings/experiment/independentVariables'].items():
                 values = eval(variable[1]['function'][()])
                 if iterable(values):
