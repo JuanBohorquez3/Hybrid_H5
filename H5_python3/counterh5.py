@@ -55,13 +55,12 @@ def load_data(
         dtype=int
     )*-1
 
-    filter_offset = check_n_filter(results_file)
-
     for iteration, i_group in results_file['iterations'].items():
         # print(f"iteration : {iteration} : {type(iteration)}")
-        for measurement, m_group in i_group['measurements'].items():
+        for measurement, m_tup in enumerate(i_group['measurements'].items()):
             # load data, a 1D array of counter data from the measurement, each entry corresponds to
             # the measured counts in a given binning period
+            m_group = m_tup[1]
             raw_data = np.array(m_group['data/counter/data'][()])[0]
 
             # Loose cables or improper triggering can lead to some lost bins. We simply do not write
@@ -81,17 +80,13 @@ def load_data(
                 tot_bins = drop_bins + ro_bins
                 iteration = int(iteration)
                 measurement = int(measurement)
-                if measurement < filter_offset:
-                    print(f"measurement {measurement} has been dropped due to fist-N-filter. First {filter_offset} being dropped")
-                    continue
                 try:
-                    binned_counter_data[iteration, measurement - filter_offset, shot, :] = raw_data[shot*tot_bins: (shot + 1) * tot_bins]
+                    binned_counter_data[iteration, measurement, shot, :] = raw_data[shot*tot_bins: (shot + 1) * tot_bins]
                 # Catch issues reshaping raw_data and omit that shot from binned_counter_data
                 except (IndexError, ValueError) as e:
                     inds = {
                         "iteration": iteration,
                         "measurement": measurement,
-                        "measurement - filter_offset": measurement - filter_offset,
                         "shot": shot,
                         "tot_bins": tot_bins,
                         "raw_data.shape": raw_data.shape}
@@ -99,11 +94,14 @@ def load_data(
                     ind_msg = ",".join([f"{var} : {val}" for var, val in inds.items()])
                     print(f"Warning. Error reading data for {ind_msg}\n {e}")
                     continue
-
     shot_counter_data = binned_counter_data[..., drop_bins:].sum(3)
     # Fix holes in data by replacing count data with the minimum acquired value
     # (registers as 0 atoms)
-    min_at = min(shot_counter_data[np.where(shot_counter_data > -1)])
+    try:
+        min_at = min(shot_counter_data[np.where(shot_counter_data > -1)])
+    except ValueError as e:
+        print(e)
+        return binned_counter_data, shot_counter_data
     shot_counter_data[np.where(shot_counter_data < 0)] = min_at
 
     return binned_counter_data, shot_counter_data
