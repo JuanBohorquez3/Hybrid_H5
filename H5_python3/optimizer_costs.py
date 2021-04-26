@@ -3,7 +3,7 @@ import scipy.optimize as opt
 from scipy.special import erf
 
 
-def load_data(h5file, inst, iteration, measurements, shots, roi=None):
+def load_data(h5file, inst, iteration, measurements, shots, roi=None, filter_N = 100):
     """
     Loads data from h5file into the array hist_dat
     :param h5file: reference to an hdf5 data file
@@ -12,8 +12,12 @@ def load_data(h5file, inst, iteration, measurements, shots, roi=None):
     :param measurements: int, number of measurements per iteration
     :param shots: number of shots per measurement
     :param roi: nX2 numpy array. format roi = array([range(top,bottom),range(left,right)])
+    :param filter_N: first N measurements to be dropped from experiment
     :return: hist_dat: numpy array of histogram data. hist_dat.shape() = (measurements,shots)
     """
+
+    filter_offset = filter_N
+
     if roi is None:
         roi = array([range(4, 7), range(3, 6)])
     if inst == 'Hamamatsu':
@@ -21,10 +25,14 @@ def load_data(h5file, inst, iteration, measurements, shots, roi=None):
         imdat = zeros((measurements, shots, len(roi[0, :]), len(roi[1, :])), dtype=int)  # image data
         for ms in range(measurements):
             for sht in range(shots):
+                if ms < filter_offset:
+                    print(
+                        "measurement {} has been dropped due to fist-N-filter. First {} being dropped".format(ms, filter_offset))
+                    continue
                 datpath = '/iterations/{}/measurements/{}/data/Hamamatsu/shots/{}'.format(iteration, ms, sht)
                 try:
                     im = array(h5file[(datpath)])
-                    imdat[ms, sht, :, :] = im[roi[0], :][:, roi[1]]
+                    imdat[ms-filter_offset, sht, :, :] = im[roi[0], :][:, roi[1]]
                 except KeyError as er:
                     print("Error while loading data : {}".format(er))
                     print(datpath)
@@ -38,17 +46,21 @@ def load_data(h5file, inst, iteration, measurements, shots, roi=None):
             (measurements, shots, drop_bins + ro_bins),
             dtype=int
         )
-
         for ms in range(measurements):
             # load data, a 1D array of counter data from the measurement, each entry corresponds to
             # the measured counts in a given binning period
+            if ms < filter_offset:
+                print(
+                    "measurement {} has been dropped due to fist-N-filter. First {} being dropped".format(
+                        ms, filter_offset))
+                continue
             datpath = '/iterations/{}/measurements/{}/data/counter/data'.format(iteration, ms)
             raw_data = array(h5file[datpath][()])[0]  # note to test
             for shot in range(shots):
                 tot_bins = drop_bins + ro_bins
                 iteration = int(iteration)
                 ms = int(ms)
-                binned_counter_data[ms, shot, :] = raw_data[shot * tot_bins: (shot + 1) * tot_bins]
+                binned_counter_data[ms-filter_offset, shot, :] = raw_data[shot * tot_bins: (shot + 1) * tot_bins]
 
         hist_dat = binned_counter_data[..., drop_bins:].sum(2)
 
