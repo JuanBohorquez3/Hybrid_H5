@@ -109,7 +109,9 @@ def iterate_plot_2D(
         data_error: ndarray = None,
         x_ivar: str = None,
         description: str = "arb",
-        shots: int = 2):
+        shots: int = 2,
+        **kwargs
+):
     """
     plot a 2D experiment by plotting a line graph for each value of one of the independent
     variables.
@@ -176,7 +178,7 @@ def iterate_plot_2D(
             data_ers = error_nd[i]
             # value of the y_ivar for this run through the loop
             y_val = sorted(iterations.independent_variables[y_ivar])[i]
-            axarr[i].errorbar(x_vals, data_vals, yerr=data_ers, label=f"Shot {shot}")
+            axarr[i].errorbar(x_vals, data_vals, yerr=data_ers, label=f"Shot {shot}", **kwargs)
             axarr[i].set_xlabel(x_ivar)
             axarr[i].set_ylabel(description)
             axarr[i].set_title(f"{y_ivar} = {y_val}")
