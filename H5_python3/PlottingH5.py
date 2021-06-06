@@ -4,6 +4,7 @@ A variety of functions useful for plotting data
 import pandas as pd
 from numpy import *
 import matplotlib.pyplot as plt
+from typing import Tuple
 
 from Iterations import Iterations
 
@@ -27,7 +28,9 @@ def default_plotting(
         data: ndarray,
         data_error: ndarray = None,
         shots: int = 1,
-        description: str = "value"
+        description: str = "value",
+        figsize: Tuple = None,
+        **kwargs
 ):
     """
     Plots data in data the default manner, based on the number of independent variables present
@@ -49,6 +52,11 @@ def default_plotting(
         shots: number of shots taken per measurement. If not specified only the first shot is
             plotted
         description: description of data to be plotted (used for plot title)
+        figsize: size of the plot to be made. In the case of 2D scans figsize will be changed to (fs[0]*shots, fs[1]). Defaults are:
+            0 ivs : Irrelevant
+            1 ivs : (6,6)
+            2 ivs : (shots * 5, 5)
+        **kwargs: kwargs to be passed to relevant plotting function. In 1D scans it's errorbar() in 2D functions its imshow()
     """
     # Set default
     data_error = zeros(data.shape, dtype=float) if data_error is None else data_error
@@ -65,11 +73,13 @@ def default_plotting(
             print(f"shot {shot} {description} : {data[0, shot]:.3f} +/- {data_error[0, shot]:.3f}")
     elif len(iterations.keys()) == 2:
         independent_variable = list(iterations.keys())[1]
+        if figsize is None:
+            figsize = (6, 5)
         xlin = iterations[independent_variable]
         # Sort data to match ordering of iterations dataframe
         data = data[array(iterations['iteration'], dtype=int)]
         data_error = data_error[array(iterations['iteration'], dtype=int)]
-        fig, ax = plt.subplots(1, 1, figsize=(6, 5))
+        fig, ax = plt.subplots(1, 1, figsize=figsize)
         for shot in range(shots):
             ax.errorbar(xlin, data[:, shot], yerr=data_error[:, shot], label=f"Shot {shot}")
         ax.legend()
@@ -77,7 +87,11 @@ def default_plotting(
         ax.set_xlabel(independent_variable)
         fig.show()
     elif len(iterations.keys()) == 3:
-        fig, axarr = plt.subplots(1, shots, figsize=(shots * 5, 5))
+        if figsize is None:
+            figsize = (shots * 5, 5)
+        else:
+            figsize = (shots * figsize[0], figsize[1])
+        fig, axarr = plt.subplots(1, shots, figsize=figsize)
         extent = [
             min(iterations[iterations.ivars[1]] - iterations._step_sizes[1] / 2),  # left
             max(iterations[iterations.ivars[1]] + iterations._step_sizes[1] / 2),  # right
@@ -88,7 +102,7 @@ def default_plotting(
             axarr = [axarr]
         for shot in range(shots):
             means_nd = iterations.fold_to_nd(data[:, shot])
-            im = axarr[shot].imshow(means_nd, interpolation='none', aspect='auto', extent=extent)
+            im = axarr[shot].imshow(means_nd, interpolation='none', aspect='auto', extent=extent, **kwargs)
             fig.colorbar(im, ax=axarr[shot], use_gridspec=True, shrink=.7)
             axarr[shot].set_xlabel(iterations.ivars[1])
             axarr[shot].set_ylabel(iterations.ivars[0])
