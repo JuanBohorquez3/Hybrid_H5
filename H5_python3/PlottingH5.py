@@ -85,6 +85,7 @@ def default_plotting(
         ax.legend()
         ax.set_ylabel(description)
         ax.set_xlabel(independent_variable)
+        fig.tight_layout()
         fig.show()
     elif len(iterations.keys()) == 3:
         if figsize is None:
@@ -112,6 +113,7 @@ def default_plotting(
             axarr[shot].set_yticks(round_(array(iterations[iterations.ivars[0]]).astype(float), 2))
         # fig.tight_layout()
         fig.suptitle(description)
+        fig.tight_layout()
         fig.show()
     else:
         print("too many axes, look for purpose made cells")
