@@ -41,7 +41,7 @@ def load_data(
         dtype=int
     )
 
-    for iteration, i_group in results_file['iterations'].items():
+    for iteration, i_group in results_file['experiments/0/iterations'].items():
         # print(f"iteration : {iteration} : {type(iteration)}")
         for measurement, m_tup in enumerate(i_group['measurements'].items()):
             m_group = m_tup[1]
