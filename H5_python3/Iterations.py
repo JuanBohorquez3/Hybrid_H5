@@ -144,7 +144,11 @@ class Iterations:
         """
         df = pd.DataFrame(columns=["iteration"] + self.ivars)
         for iteration in self.results['iterations'].items():
-            i = int(iteration[0])
+            try:
+                i = int(iteration[0])
+            except ValueError:
+                print(f"Warning : {iteration[0]} is not a valid iteration number")
+                continue
             ivar_vals = self.__get_iteration_ivars(iteration[1], *self.ivars)
             ivar_vals.update({"iteration": i})
             df = df.append(pd.DataFrame(ivar_vals, index=[i]))
