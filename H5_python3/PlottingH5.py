@@ -4,7 +4,7 @@ A variety of functions useful for plotting data
 import pandas as pd
 from numpy import *
 import matplotlib.pyplot as plt
-from typing import Tuple
+from typing import Tuple, Union, List
 
 from Iterations import Iterations
 
@@ -27,7 +27,7 @@ def default_plotting(
         iterations: Iterations,
         data: ndarray,
         data_error: ndarray = None,
-        shots: int = 1,
+        shots: Union[int, List] = 1,
         description: str = "value",
         figsize: Tuple = None,
         **kwargs
@@ -49,7 +49,7 @@ def default_plotting(
             shots = 1.
         data_error: ndarray of uncertainty in data. Must be indexed [iteration,shot] or
             [iteration] if shots = 1
-        shots: number of shots taken per measurement. If not specified only the first shot is
+        num_shots: number of shots taken per measurement. If not specified only the first shot is
             plotted
         description: description of data to be plotted (used for plot title)
         figsize: size of the plot to be made. In the case of 2D scans figsize will be changed to (fs[0]*shots, fs[1]). Defaults are:
@@ -68,8 +68,13 @@ def default_plotting(
         data = _fix_nd_indexing(data)
         data_error = _fix_nd_indexing(data_error)
 
+    if shots is int:
+        num_shots = shots
+    else:
+        num_shots = len(shots)
+
     if len(iterations.keys()) == 1:
-        for shot in range(shots):
+        for shot in range(num_shots):
             print(f"shot {shot} {description} : {data[0, shot]:.3f} +/- {data_error[0, shot]:.3f}")
     elif len(iterations.keys()) == 2:
         independent_variable = list(iterations.keys())[1]
@@ -80,8 +85,12 @@ def default_plotting(
         data = data[array(iterations['iteration'], dtype=int)]
         data_error = data_error[array(iterations['iteration'], dtype=int)]
         fig, ax = plt.subplots(1, 1, figsize=figsize)
-        for shot in range(shots):
-            ax.errorbar(xlin, data[:, shot], yerr=data_error[:, shot], label=f"Shot {shot}")
+        for shot in range(num_shots):
+            if shots is int:
+                label = f"Shot = {shot}"
+            else:
+                label = f"{shots[shot]}"
+            ax.errorbar(xlin, data[:, shot], yerr=data_error[:, shot], label=label, **kwargs)
         ax.legend()
         ax.set_ylabel(description)
         ax.set_xlabel(independent_variable)
@@ -89,28 +98,32 @@ def default_plotting(
         fig.show()
     elif len(iterations.keys()) == 3:
         if figsize is None:
-            figsize = (shots * 5, 5)
+            figsize = (num_shots * 5, 5)
         else:
-            figsize = (shots * figsize[0], figsize[1])
-        fig, axarr = plt.subplots(1, shots, figsize=figsize)
+            figsize = (num_shots * figsize[0], figsize[1])
+        fig, axarr = plt.subplots(1, num_shots, figsize=figsize)
         extent = [
             min(iterations[iterations.ivars[1]] - iterations._step_sizes[1] / 2),  # left
             max(iterations[iterations.ivars[1]] + iterations._step_sizes[1] / 2),  # right
             max(iterations[iterations.ivars[0]] + iterations._step_sizes[0] / 2),  # bottom
             min(iterations[iterations.ivars[0]] - iterations._step_sizes[0] / 2)   # top
         ]
-        if shots == 1:
+        if num_shots == 1:
             axarr = [axarr]
-        for shot in range(shots):
+        for shot in range(num_shots):
             means_nd = iterations.fold_to_nd(data[:, shot])
             im = axarr[shot].imshow(means_nd, interpolation='none', aspect='auto', extent=extent, **kwargs)
             fig.colorbar(im, ax=axarr[shot], use_gridspec=True, shrink=.7)
             axarr[shot].set_xlabel(iterations.ivars[1])
             axarr[shot].set_ylabel(iterations.ivars[0])
-            if shots - 1:
-                axarr[shot].set_title(f"Shot {shot}")
-            axarr[shot].set_xticks(round_(array(iterations[iterations.ivars[1]]).astype(float), 2))
-            axarr[shot].set_yticks(round_(array(iterations[iterations.ivars[0]]).astype(float), 2))
+            if num_shots - 1:
+                if shots is int:
+                    title = f"Shot = {shot}"
+                else:
+                    title = f"{shots[shot]}"
+                axarr[shot].set_title(title)
+            #axarr[shot].set_xticks(round_(array(iterations[iterations.ivars[1]]).astype(float), 6))
+            #axarr[shot].set_yticks(round_(array(iterations[iterations.ivars[0]]).astype(float), 6))
         # fig.tight_layout()
         fig.suptitle(description)
         fig.tight_layout()
