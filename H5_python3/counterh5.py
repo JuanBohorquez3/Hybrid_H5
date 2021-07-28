@@ -57,43 +57,48 @@ def load_data(
 
     for iteration, i_group in results_file['iterations'].items():
         # print(f"iteration : {iteration} : {type(iteration)}")
-        for measurement, m_tup in enumerate(i_group['measurements'].items()):
-            # load data, a 1D array of counter data from the measurement, each entry corresponds to
-            # the measured counts in a given binning period
-            m_group = m_tup[1]
-            raw_data = np.array(m_group['data/counter/data'][()])[0]
+        try:
 
-            # Loose cables or improper triggering can lead to some lost bins. We simply do not write
-            # this data to our data arrays
-            if raw_data.shape[0] != shots_per_measurement*(drop_bins+ro_bins):
-                inds = {
-                    "iteration": iteration,
-                    "measurement": measurement
-                }
-                ind_msg = ",".join([f"{var} : {val}" for var, val in inds.items()])
-                print(
-                    f"Invalid data shape in hdf5 file. raw_data.shape = {raw_data.shape}" +
-                    f"\n\tlocation : {ind_msg}"
-                )
-                continue
-            for shot in range(shots_per_measurement):
-                tot_bins = drop_bins + ro_bins
-                iteration = int(iteration)
-                measurement = int(measurement)
-                try:
-                    binned_counter_data[iteration, measurement, shot, :] = raw_data[shot*tot_bins: (shot + 1) * tot_bins]
-                # Catch issues reshaping raw_data and omit that shot from binned_counter_data
-                except (IndexError, ValueError) as e:
+            for measurement, m_tup in enumerate(i_group['measurements'].items()):
+                # load data, a 1D array of counter data from the measurement, each entry corresponds to
+                # the measured counts in a given binning period
+                m_group = m_tup[1]
+                raw_data = np.array(m_group['data/counter/data'][()])[0]
+
+                # Loose cables or improper triggering can lead to some lost bins. We simply do not write
+                # this data to our data arrays
+                if raw_data.shape[0] != shots_per_measurement*(drop_bins+ro_bins):
                     inds = {
                         "iteration": iteration,
-                        "measurement": measurement,
-                        "shot": shot,
-                        "tot_bins": tot_bins,
-                        "raw_data.shape": raw_data.shape}
-                    print(iteration)
+                        "measurement": measurement
+                    }
                     ind_msg = ",".join([f"{var} : {val}" for var, val in inds.items()])
-                    print(f"Warning. Error reading data for {ind_msg}\n {e}")
+                    print(
+                        f"Invalid data shape in hdf5 file. raw_data.shape = {raw_data.shape}" +
+                        f"\n\tlocation : {ind_msg}"
+                    )
                     continue
+                for shot in range(shots_per_measurement):
+                    tot_bins = drop_bins + ro_bins
+                    iteration = int(iteration)
+                    measurement = int(measurement)
+                    try:
+                        binned_counter_data[iteration, measurement, shot, :] = raw_data[shot*tot_bins: (shot + 1) * tot_bins]
+                    # Catch issues reshaping raw_data and omit that shot from binned_counter_data
+                    except (IndexError, ValueError) as e:
+                        inds = {
+                            "iteration": iteration,
+                            "measurement": measurement,
+                            "shot": shot,
+                            "tot_bins": tot_bins,
+                            "raw_data.shape": raw_data.shape}
+                        print(iteration)
+                        ind_msg = ",".join([f"{var} : {val}" for var, val in inds.items()])
+                        print(f"Warning. Error reading data for {ind_msg}\n {e}")
+                        continue
+        except RuntimeError as e:
+            print(f"{e}\nData potentially corrupted. Data is being omitted")
+            continue
     shot_counter_data = binned_counter_data[..., drop_bins:].sum(3)
     # Fix holes in data by replacing count data with the minimum acquired value
     # (registers as 0 atoms)
