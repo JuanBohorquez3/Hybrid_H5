@@ -14,7 +14,8 @@ def load_data(
         results_file,
         cut_off,
         roi,
-        experiment
+        experiment,
+        debuging = False
 ):
     """
     Loads data from an Andor camera into a numpy array
@@ -52,9 +53,8 @@ def load_data(
 
     for iteration in range(0, total_iterations):
         # print(f"iteration : {iteration} : {type(iteration)}")
-        it = opt_iteration * total_iterations + iteration
-        i_group = results_file['iterations/{}'.format(it)]
-        print("iteration: {}, it: {}, i_group: {}".format(iteration, it, i_group))
+        i_group = results_file['experiments/{}/iterations/{}'.format(opt_iteration, iteration)]
+        print("iteration: {}, it: {}, i_group: {}".format(iteration, iteration, i_group))
         for measurement, m_tup in enumerate(i_group['measurements'].items()):
             m_group = m_tup[1]
             # print(f"\tmeasurement : {measurement} : {type(measurement)}")
@@ -76,13 +76,27 @@ def load_data(
                         )
                     )
 
+    # if debuging mode is on write the andor images in the ROI to the results file
+    if debuging:
+        
+        parent_node = results_file["/experiments"]
+        data_group_name = "opt_raw_data"
+        try:
+            node = parent_node[data_group_name]
+        except KeyError:
+            print("optimizer data node does not exist. Creating node")
+            node = parent_node.create_group(data_group_name)
+            node = parent_node[data_group_name]
+        node["opt_iteration_{}".format(opt_iteration)] = andr_pix
+
     cut_pix = andr_pix > cut_off
-    pass_frac = cut_pix.sum(3).sum(3) / (andr_pix.shape[-1] * andr_pix.shape[-2])
+    pass_frac = np.array(cut_pix.sum(3).sum(3), dtype=float) / (andr_pix.shape[-1] * andr_pix.shape[-2])
 
     return pass_frac.mean(1)[:, 0], pass_frac.std(1)[:, 0]
 
 
 def fit_to_lorenz(x_data, y_data, y_err, guess):
+    print("for fit:\n\tx_data = {}\n\ty_data = {}\n\ty_err = {}".format(x_data,y_data,y_err))
     def lorenz(x, x0, fwhm, a, o):
         """
         Lorenzian function
@@ -96,15 +110,15 @@ def fit_to_lorenz(x_data, y_data, y_err, guess):
         Returns:
             o + a /((x-x0)**2 + (fwhm)**2)
         """
-        return o + a / ((x-x0)**2 + (fwhm)**2)
+        return o + a / ((x-x0)**2 + fwhm**2)
 
-    func = lambda x, x0, fwhm, a, o: lorenz(x, x0, fwhm, a, o)
+    func = lorenz
 
     try:
         popt, pcov = opt.curve_fit(f=func, xdata=x_data, ydata=y_data, sigma=y_err, p0=guess)
         perr = sqrt(diag(pcov))
     except RuntimeError as rte:
-        print("{}:\nFailed to fit results")
-        popt, perr = None, None
+        print("{}:\nFailed to fit results".format(rte))
+        popt, perr = [None], [None]
 
     return popt, perr
