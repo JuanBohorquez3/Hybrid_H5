@@ -153,9 +153,11 @@ class Iterations:
             ivar_vals.update({"iteration": i})
             df = df.append(pd.DataFrame(ivar_vals, index=[i]))
 
-        # Sort the dataframe indeces by values if independent variables (not iteration number) so
-        # operations can be performed somewhat intuitively  TODO : Document this better
-        # breaks with 1 iteration
+        # When increasing iteration number does not map to increasing independent variable values many
+        # plotting functions break or produce confusing plots. Here we sort the dataframe indices by increasing
+        # independent variable values, holding on to the iteration number for each set of IV values.
+        # This functionality should leave experiments unchanged when each independent variable array increases
+        # monotonically
         if len(df) == 1:
             return df
         else:
