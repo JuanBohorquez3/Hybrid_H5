@@ -68,7 +68,7 @@ def default_plotting(
         data = _fix_nd_indexing(data)
         data_error = _fix_nd_indexing(data_error)
 
-    if shots is int:
+    if type(shots) is int:
         num_shots = shots
     else:
         num_shots = len(shots)
@@ -86,7 +86,7 @@ def default_plotting(
         data_error = data_error[array(iterations['iteration'], dtype=int)]
         fig, ax = plt.subplots(1, 1, figsize=figsize)
         for shot in range(num_shots):
-            if shots is int:
+            if type(shots) is int:
                 label = f"Shot = {shot}"
             else:
                 label = f"{shots[shot]}"
@@ -117,7 +117,7 @@ def default_plotting(
             axarr[shot].set_xlabel(iterations.ivars[1])
             axarr[shot].set_ylabel(iterations.ivars[0])
             if num_shots - 1:
-                if shots is int:
+                if type(shots) is int:
                     title = f"Shot = {shot}"
                 else:
                     title = f"{shots[shot]}"
