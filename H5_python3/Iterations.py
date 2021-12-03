@@ -37,11 +37,13 @@ class Iterations:
             self.__results = None
             self.data_frame: pd.DataFrame = df
         self.__results = results_file
+        self.__constants_str = self._get_constants()
+        self.__dependent_var_str = self._get_dependent_variables()
         self.__independent_variables: OrderedDict = self._get_independent_variables()
         self.ivars: List[str] = sorted(list(self.__independent_variables.keys()))
         if df is None:
             self.data_frame: pd.DataFrame = self._load_df()
-
+        self.__dependent_variables: Dict[Dict[int, float]] = {}
 
     @property
     def loc(self):
@@ -63,7 +65,25 @@ class Iterations:
 
         sorted alphabetically by name
         """
-        return self.__independent_variables
+        # quick deep copy to prevent mutable-ness of dict from causing bugs
+        return OrderedDict({ky: value for ky, value in self.__independent_variables.items()})
+
+    @property
+    def dependent_variables(self) -> Dict[Dict[int, float]]:
+        """
+        Ordered Dict of dependent variable names and the values each of them too (in order).
+
+        Dict structured [dependent variable name: [iteration number: dependent variable value] ]
+        """
+        # quick deep copy to prevent mutable-ness of dict from causing bugs
+        return {ky: val for ky, val in self.__dependent_variables.items()}
+
+    @property
+    def dvars(self) -> List[str]:
+        """
+        Returns: List of dependent variable names
+        """
+        return [name for name in self.dependent_variables.keys()]
 
     @property
     def _step_sizes(self) -> Tuple[float]:
@@ -91,6 +111,47 @@ class Iterations:
             map of ivar_names to their values
         """
         return {name: iteration[f"variables/{name}"][()] for name in ivar_names}
+
+    def _get_constants(self):
+        constants_str = self.results["settings/experiment/constantsStr"][()]
+
+        # put all info from constants into local memory
+        exec(constants_str, globals(), globals())
+
+        return constants_str
+
+    def _get_dependent_variables(self):
+        dep_str = self.results["settings/experiment/dependentVariablesStr"][()]
+        return dep_str
+
+    def load_dependent_variables(self, d_var_names: Union[str, List[str]]):
+        """
+        Loads the dependent variable(s) in d_var_names and appends them to the iterations dataframe. Update
+        self.__dependent_variables to reflect these changes
+        Args:
+            d_var_names: name or list of names of dependent variables to append to the dataframe
+        """
+        if type(d_var_names) is str:
+            d_var_names = [d_var_names]
+
+        dep_df = pd.DataFrame(columns=d_var_names)
+        # Load values to a dataframe in the same way we do for independent variables
+        for iteration in self.results["iterations"].items():
+            try:
+                i = int(iteration[0])
+            except ValueError:
+                print(f"Warning : {iteration[0]} is not a valid iteration number")
+                continue
+            d_var_vals = self.__get_iteration_ivars(iteration[1], *d_var_names)
+            dep_df = dep_df.append(pd.DataFrame(d_var_vals, index=[i]))
+        # Append the columns to the iterations dataframe as-if they're independent variables
+        self.data_frame = self.data_frame.join(dep_df)
+        # Update the __dependent_variables dict so that new dependent variables can be updated multiple times.
+        # Initial dict is empty. Use the "dict" option in to_dict to preserve information of iteration number within the
+        # dependent variables dict. Can't save them the same way as we do for independent_variables because the
+        # variables we'd like to analyze are often complex functions of the simple functions we use for
+        # independent_variables
+        self.__dependent_variables.update(self.data_frame[d_var_names].to_dict("dict"))
 
     def _get_independent_variables(self):
         """
