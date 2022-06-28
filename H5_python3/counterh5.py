@@ -75,7 +75,8 @@ def load_data(
                     ind_msg = ",".join([f"{var} : {val}" for var, val in inds.items()])
                     print(
                         f"Invalid data shape in hdf5 file. raw_data.shape = {raw_data.shape}" +
-                        f"\n\tlocation : {ind_msg}"
+                        f"\n\tlocation : {ind_msg}" +
+                        f"\n\ttotal bins = {shots_per_measurement*(drop_bins+ro_bins)}"
                     )
                     continue
                 for shot in range(shots_per_measurement):
