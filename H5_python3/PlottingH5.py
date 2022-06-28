@@ -9,6 +9,31 @@ from typing import Tuple, Union, List
 from Iterations import Iterations
 
 
+def get_var(its: Iterations, variable: str = None) -> Tuple[str, int]:
+    """
+    Get variable name and and index from iterations object
+    """
+    if variable is not None:
+        if variable not in its.vars:
+            raise KeyError(
+                f"{variable} is not an independent or dependent variable of this experiment.")
+        var_ind = [i for i, v in enumerate(its.vars) if v == variable][0]
+    else:
+        # Prompt the user to input which independent variable is on the x-axis of each graph
+        ms = "Which Independent variable or dependent variable is on the x-axis? :\n"
+        for i, v in enumerate(its.vars):
+            ms += f"\t{i}) : {v}\n"
+        while True:
+            try:
+                var_ind = int(input(ms))
+                variable = its.vars[var_ind]
+            except (ValueError, IndexError):
+                print(f"Not a valid input, input an int between 0 and {len(its.vars) - 1}")
+                continue
+            else:
+                break
+    return variable, var_ind
+
 def _fix_nd_indexing(data: ndarray):
     """
     Fix indexing for a data array that can be indexed [iteration] instead of [iteration, shot]
@@ -73,10 +98,11 @@ def default_plotting(
     else:
         num_shots = len(shots)
 
-    if len(iterations.keys()) == 1:
+    if len(iterations.ivars) == 0:
         for shot in range(num_shots):
             print(f"shot {shot} {description} : {data[0, shot]:.3f} +/- {data_error[0, shot]:.3f}")
-    elif len(iterations.keys()) == 2:
+        return None, None
+    elif len(iterations.ivars) == 1:
         independent_variable = list(iterations.keys())[1]
         if figsize is None:
             figsize = (6, 5)
@@ -96,7 +122,8 @@ def default_plotting(
         ax.set_xlabel(independent_variable)
         fig.tight_layout()
         fig.show()
-    elif len(iterations.keys()) == 3:
+        return fig, ax
+    elif len(iterations.ivars) == 2:
         if figsize is None:
             figsize = (num_shots * 5, 5)
         else:
@@ -128,17 +155,19 @@ def default_plotting(
         fig.suptitle(description)
         fig.tight_layout()
         fig.show()
+        return fig, axarr
     else:
         print("too many axes, look for purpose made cells")
-
 
 def iterate_plot_2D(
         iterations: Iterations,
         data: ndarray,
         data_error: ndarray = None,
-        x_ivar: str = None,
+        x_var: str = None,
+        it_var: str = None,
         description: str = "arb",
-        shots: int = 2,
+        shots: Union[int, List] = 2,
+        axsize=None,
         **kwargs
 ):
     """
@@ -150,13 +179,16 @@ def iterate_plot_2D(
         iterations : Iterations object containing relevant experiment information
         data : data array, indexed [iteration,shot]
         data_error : uncertainty in data, indexed [iteration,shot]
-        x_ivar : independent variable to place on x-axis. If not specified the user is prompted to
+        x_var : variable to place on x-axis. If not specified the user is prompted to
             choose one when this code is run
+        it_var : variable over which plots iterate. If not specified the user is prompted to choose one when code is run
         description : description of data, put on y-axis of plots
-        shots : number of shots specified in data
+        shots : number of shots specified in data. If a list, len is taken as number of shots
+        axsize : size of individual axes
     Returns:
         fig, axarr: figure and axis array that was plotted
     """
+
     # Set default
     data_error = zeros(data.shape, dtype=float) if data_error is None else data_error
 
@@ -171,46 +203,60 @@ def iterate_plot_2D(
         raise ValueError(
             "This plot only works to plot data from an experiment with two independent variables")
 
-    if x_ivar is not None:
-        if x_ivar not in iterations.ivars:
-            raise KeyError(
-                f"{x_ivar} is not an independent variable of this experiment.")
-        x_ivar_ind = int(iterations.ivars[1] == x_ivar)
+    x_var, x_var_ind = get_var(iterations, x_var)
+
+    it_var, it_var_ind = get_var(iterations, it_var)
+
+    # print(f"x_var(_ind) = {x_var, x_var_ind}")
+    # print(f"it_var(_ind) = {it_var, it_var_ind}")
+    if it_var not in iterations.independent_variables:
+        raise ValueError("iterated variable must be an independent variable")
+
+    if it_var == x_var:
+        raise ValueError("iterated variable must be distinct from x_var")
+
+    if type(shots) is int:
+        num_shots = shots
     else:
-        # Prompt the user to input which independent variable is on the x-axis of each graph
-        ms = "Which Independent variable is on the x-axis? :\n"
-        for i, ivar in enumerate(iterations.ivars):
-            ms += f"\t{i}) : {ivar}\n"
-        while True:
-            try:
-                x_ivar_ind = int(input(ms))
-                x_ivar = iterations.ivars[x_ivar_ind]
-            except (ValueError, IndexError):
-                print(f"Not a valid input, input an int between 0 and {len(iterations.ivars) - 1}")
-                continue
-            else:
-                break
+        num_shots = len(shots)
 
-    y_ivar = iterations.ivars[not (x_ivar_ind)]
+    plots = len(iterations.independent_variables[it_var])
+    if axsize is None:
+        figsize = (6, 4 * plots)
+    else:
+        figsize = (axsize[0], axsize[1]*plots)
+    fig, axarr = plt.subplots(plots, 1, figsize=figsize)
 
-    plots = len(iterations.independent_variables[y_ivar])
-    fig, axarr = plt.subplots(plots, 1, figsize=(6, 4 * plots))
-    for shot in range(shots):
+    for shot in range(num_shots):
         data_nd = iterations.fold_to_nd(data[:, shot])
         error_nd = iterations.fold_to_nd(data_error[:, shot])
-        if not x_ivar_ind:  # Transpose the data array if the index is right, for convenience
+        # print(it_var_ind)
+        if it_var_ind:
+            # print("transposing data_nd")
             data_nd = data_nd.T
             error_nd = error_nd.T
 
-        x_vals = sorted(iterations.independent_variables[x_ivar])  # values taken on the x-axis
         for i, data_vals in enumerate(data_nd):
             data_ers = error_nd[i]
-            # value of the y_ivar for this run through the loop
-            y_val = sorted(iterations.independent_variables[y_ivar])[i]
-            axarr[i].errorbar(x_vals, data_vals, yerr=data_ers, label=f"Shot {shot}", **kwargs)
-            axarr[i].set_xlabel(x_ivar)
+            if x_var in iterations.independent_variables:
+                x_vals = sorted(iterations.independent_variables[x_var])  # values taken on the x-axis
+            else:
+                x_indep = iterations.ivars[not it_var_ind]
+                x_len = len(iterations.independent_variables[x_indep])
+                if it_var_ind:
+                    x_vals = iterations[x_var][i*x_len:(i+1)*x_len]
+                else:
+                    x_vals = iterations[x_var][i::len(iterations.independent_variables[it_var])]
+                # print(f"i, data_vals, len(data_vals) = {i}, {data_vals}, len(data_vals)")
+                # print(x_indep, x_len, x_vals)
+                # print(f"len(x_vals) = {len(x_vals)}")
+            # value of the iterated variable for this run through the loop
+            it_val = sorted(iterations.independent_variables[it_var])[i]
+            label = shot if type(shots) is int else shots[shot]
+            axarr[i].errorbar(x_vals, data_vals, yerr=data_ers, label=label, **kwargs)
+            axarr[i].set_xlabel(x_var)
             axarr[i].set_ylabel(description)
-            axarr[i].set_title(f"{y_ivar} = {y_val}")
+            axarr[i].set_title(f"{it_var} = {it_val}")
             axarr[i].legend()
     fig.tight_layout()
     fig.show()

@@ -7,7 +7,7 @@ from scipy.optimize import curve_fit
 import matplotlib.pyplot as plt
 
 from Iterations import Iterations
-from PlottingH5 import _fix_nd_indexing
+from PlottingH5 import _fix_nd_indexing, get_var
 
 
 # Probability and Statistics  ----------------------------------------------------------------------
@@ -27,9 +27,12 @@ def iterate_fit_2D(
         iterations: Iterations,
         data: ndarray,
         func: Callable,
-        guess: List[float],
+        guess: List[float] = None,
+        guesses: List[List[float]] = None,
+        g_split: Union[int, List[int]] = -1,
         data_error: ndarray = None,
-        x_ivar: str = None,
+        x_var: str = None,
+        it_var: str = None,
         shots: int = 2,
 ) -> Tuple[ndarray,ndarray]:
     """
@@ -42,9 +45,18 @@ def iterate_fit_2D(
         iterations : Iterations object containing relevant experiment information
         data : data array, indexed [iteration,shot]
         func : function to fit to
-        guess : initial guess for fitting parameters
+        guess : initial guess for fitting parameters. If None guesses and g_split are used
+        guesses : List of initial guesses of fitting parameters. Used in tandem with g_split.
+        g_split : List outlining which fits should use which guesses. Use in tandem with guesses argument.
+            Use cases based on guesses.shape[0]:
+                == 0 : Empty array, throw a ValueError
+                == 1 : Same functionality as if guess had been used
+                == 2 : guesses[0] used for fits [:g_split] guesses[1] used for fits [g_split:]. If g_split
+                    is a list, g_split == g_split[0]
+                >= 3 : guesses[i] used for fits [g_split[i-1]:g_split[i]]. If i == 0, g_split[i-1] = 0. If
+                    i == guesses.shape[0], g_split[i] = -1. If g_split is not a List, throw a value error
         data_error : uncertainty in data, indexed [iteration,shot]
-        x_ivar : independent variable to place on x-axis. If not specified the user is prompted to
+        x_var : independent variable to place on x-axis. If not specified the user is prompted to
             choose one when this code is run
         shots : number of shots specified in data
     Returns:
@@ -67,51 +79,96 @@ def iterate_fit_2D(
         raise ValueError(
             "This plot only works to plot data from an experiment with two independent variables")
 
-    if x_ivar is not None:
-        if x_ivar not in iterations.ivars:
-            raise KeyError(
-                f"{x_ivar} is not an independent variable of this experiment.")
-        x_ivar_ind = int(iterations.ivars[1] == x_ivar)
-    else:
-        # Prompt the user to input which independent variable is on the x-axis of each graph
-        ms = "Which Independent variable is on the x-axis? :\n"
-        for i, ivar in enumerate(iterations.ivars):
-            ms += f"\t{i}) : {ivar}\n"
-        while True:
+    x_var, x_var_ind = get_var(iterations, x_var)
+    it_var, it_var_ind = get_var(iterations, it_var)
+    if it_var not in iterations.independent_variables:
+        raise ValueError("iterated variable must be an independent variable")
+    if it_var == x_var:
+        raise ValueError("iterated variable must be distinct from x_var")
+
+    no_guesses = None
+    if guess is None:
+        if not (guesses and g_split):
+            raise ValueError("If guess is not provided BOTH guesses and g_split must be provided")
+        no_guesses = len(guesses)
+        if no_guesses == 0:
+            raise ValueError("Guesses cannot be empty list. Provide valid guesses")
+        elif no_guesses == 1:
+            guess = guesses[0]
+            no_guesses = None
+            fit_dim = len(guess)
+        elif no_guesses >= 2:
             try:
-                x_ivar_ind = int(input(ms))
-                x_ivar = iterations.ivars[x_ivar_ind]
-            except (ValueError, IndexError):
-                print(f"Not a valid input, input an int between 0 and {len(iterations.ivars) - 1}")
-                continue
-            else:
-                break
+                tmp = g_split[0]  # check if g_split is iterable
+            except TypeError:
+                # if not set to a value in a list
+                g_split = [g_split]
+            dims = [len(g) for g in guesses]
+            if not all([d == dims[0] for d in dims]):
+                raise ValueError("All guesses must have the same dimensions")
+            fit_dim = dims[0]
+        if no_guesses is not None:
+            try:
+                # Make sure all values in g_split are usable as list indices
+                g_split = [int(cut) for cut in g_split]
+                g_split = g_split[:no_guesses - 1]
+            except ValueError as ve:
+                raise TypeError("All values in g_split must be ints") from ve
+    else:
+        fit_dim = len(guess)
 
-    y_ivar = iterations.ivars[not (x_ivar_ind)]
-
-    popts = zeros((len(iterations.independent_variables[y_ivar]), shots, len(guess)), dtype=float)
-    perrs = zeros((len(iterations.independent_variables[y_ivar]), shots, len(guess)), dtype=float)
+    popts = zeros((len(iterations.independent_variables[it_var]), shots, fit_dim), dtype=float)
+    perrs = zeros(popts.shape, dtype=float)
 
     for shot in range(shots):
         data_nd = iterations.fold_to_nd(data[:, shot])
         error_nd = iterations.fold_to_nd(data_error[:, shot]) if data_error is not None else [None]*len(data_nd)
-        if not x_ivar_ind:  # Transpose the data array if the index is right, for convenience
+        if it_var_ind:  # Transpose the data array if the index is right, for convenience
+            #print("Transposing data_nd")
             data_nd = data_nd.T
             error_nd = error_nd.T if data_error is not None else error_nd
 
-        x_vals = sorted(iterations.independent_variables[x_ivar])  # values taken on the x-axis
+        # Add Redundant split to ensure for loop works nicely
+        if no_guesses is not None:
+            g_split.append(len(data_nd))
+
         for i, data_vals in enumerate(data_nd):
+            if x_var in iterations.ivars:
+                x_vals = sorted(iterations.independent_variables[x_var])  # values taken on the x-axis
+            else:
+                x_indep = iterations.ivars[not it_var_ind]
+                x_len = len(iterations.independent_variables[x_indep])
+                if it_var_ind:
+                    x_vals = iterations[x_var][i*x_len:(i+1)*x_len]
+                else:
+                    x_vals = iterations[x_var][i::len(iterations.independent_variables[it_var])]
+                #print(f"i, data_vals, len(data_vals) = {i}, {data_vals}, {len(data_vals)}")
+                #print(x_indep, x_len, x_vals)
+                #print(f"len(x_vals) = {len(x_vals)}")
+            # use correct guess params if using guesses arg
+            if no_guesses is not None:
+                for j, cut in enumerate(g_split):
+                    if i < cut:
+                        break
+                guess = guesses[j]
+                print(f"Multiple guesses detected. Using Guess {j} = {guess}")
             data_ers = error_nd[i]
             # value of the y_ivar for this run through the loop
-            y_val = sorted(iterations.independent_variables[y_ivar])[i]
-            popt, pcov = curve_fit(func, x_vals, data_vals, sigma=data_ers, p0 = guess)
-            perrs[i, shot, :] = sqrt(diag(pcov))
-            popts[i, shot, :] = popt
+            y_val = sorted(iterations.independent_variables[it_var])[i]
+            try:
+                popt, pcov = curve_fit(func, x_vals, data_vals, sigma=data_ers, p0=guess)
+            except RuntimeError as er:
+                print(f"Failed to perform fit on dataset {i}: {er}")
+                perrs[i, shot, :] = zeros(len(guess))
+                popts[i, shot, :] = array([nan]*len(guess))
+            else:
+                perrs[i, shot, :] = sqrt(diag(pcov))
+                popts[i, shot, :] = popt
 
     return popts, perrs
 
 
-def fit_and_plot_hist(func, counter_data, bns, guess, title="", plots=True):
+def fit_and_plot_hist(func, counter_data, bns, guess, title="", plots=True, **kwargs):
     hist, bin_edges = histogram(counter_data, bins=bns)
     mids = (bin_edges[0:-1] + bin_edges[1:]) / 2
     try:
@@ -125,8 +182,12 @@ def fit_and_plot_hist(func, counter_data, bns, guess, title="", plots=True):
         bad_fit = False
     perr = sqrt(diag(pcov))
 
+    if "figsize" in kwargs.keys():
+        fs = kwargs["figsize"]
+    else:
+        fs = (5,5)
     if plots:
-        fig, ax = plt.subplots(1, 1, figsize=(8, 6))
+        fig, ax = plt.subplots(1, 1, figsize=fs)
         xlin = linspace(min(counter_data), max(counter_data), 1000)
         ax.hist(counter_data, bins=bns, histtype='step', label="Raw Data")
         label = "Guess" if bad_fit else "Fit"
