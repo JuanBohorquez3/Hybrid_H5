@@ -116,11 +116,15 @@ def load_origin_data(
                 (origin_data["measurement_time_dt"] > iteration_times[i]) *
                 (origin_data["measurement_time_dt"] < end_time)
             )[0]
-
-        it_data.append(
-            pd.DataFrame(
-                {field: dataset[min(data_inds):max(data_inds)] for field, dataset in origin_data.items() if field in new_fields}
+        try:
+            it_data.append(
+                pd.DataFrame(
+                    {field: dataset[min(data_inds):max(data_inds)] for field, dataset in origin_data.items() if field in new_fields}
+                )
             )
-        )
-
+        except ValueError as e:
+            print(f"{e}\nissue in iteration {i}")
+            it_data.append(
+                None
+            )
     return it_data
