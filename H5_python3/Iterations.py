@@ -36,6 +36,8 @@ class Iterations:
         if df is not None:
             self.__results = None
             self.data_frame: pd.DataFrame = df
+        else:
+            self.data_frame: pd.DataFrame = None
         self.__results = results_file
         self.__constants_str = self._get_constants()
         self.__dependent_var_str = self._get_dependent_variables()
@@ -69,7 +71,7 @@ class Iterations:
         return OrderedDict({ky: value for ky, value in self.__independent_variables.items()})
 
     @property
-    def dependent_variables(self) -> Dict[Dict[int, float]]:
+    def dependent_variables(self) -> Dict[str, Dict[int, float]]:
         """
         Ordered Dict of dependent variable names and the values each of them too (in order).
 
@@ -86,6 +88,10 @@ class Iterations:
         return [name for name in self.dependent_variables.keys()]
 
     @property
+    def vars(self) -> List[str]:
+        return self.ivars + self.dvars
+
+    @property
     def _step_sizes(self) -> Tuple[float]:
         """
         Returns:
@@ -97,7 +103,8 @@ class Iterations:
         sorted_values = [
             sorted(list(set(values))) for iVar, values in self.items() if iVar != 'iteration'
         ]
-        return tuple([float(vals[1] - vals[0]) for vals in sorted_values])
+        return tuple([0 if len(vals) <= 1 else float(vals[1] - vals[0]) for vals in sorted_values])
+
 
     @staticmethod
     def __get_iteration_ivars(iteration: h5py.Group, *ivar_names: str) -> Dict[str, Any]:
@@ -133,6 +140,10 @@ class Iterations:
         """
         if type(d_var_names) is str:
             d_var_names = [d_var_names]
+
+        d_var_names = [name for name in d_var_names if name not in self.dvars]
+        if len(d_var_names) == 0:
+            return
 
         dep_df = pd.DataFrame(columns=d_var_names)
         # Load values to a dataframe in the same way we do for independent variables
@@ -184,7 +195,7 @@ class Iterations:
             return array(vals)
 
         indep_vars = {}
-        if self.results is None:
+        if self.data_frame is not None:
             indep_vars = {
                 ivar: ivar_uniques(self.data_frame[ivar]) for ivar in self.data_frame if ivar != 'iteration'
             }
