@@ -99,7 +99,8 @@ def drop_recapture_MC(
         wl: float = 938e-9,
         gravity: bool = True,
         n: int = 1000,
-        v0: List = None
+        v0: List = None,
+        scramble: bool = True
 ) -> Tuple[itar, itar]:
     """
     Performs a monte-carlo (MC) simulation of a single atom trapped in an ODT that is pulsed off for a time(s)
@@ -152,7 +153,7 @@ def drop_recapture_MC(
     vyi = np.random.normal(scale=std_v, size=n)
     vzi = np.random.normal(scale=std_v, size=n)
 
-    xi, yi, zi, vxi, vyi, vzi = SHO_ic(temperature, p, w0, alpha_0, rayleigh, wl, n, v0, scramble=True)
+    xi, yi, zi, vxi, vyi, vzi = SHO_ic(temperature, p, w0, alpha_0, rayleigh, wl, n, v0, scramble=scramble)
 
     Uk = 1 / 2 * m * (vxi ** 2 + vyi ** 2 + vzi ** 2) / kb  # kinetic energy in K
     Upi = Ixyz(xi, yi, zi, w0, wl, -trap_depth(p, w0, alpha_0))  # potential energy in K
