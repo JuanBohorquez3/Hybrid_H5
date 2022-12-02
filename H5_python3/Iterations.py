@@ -2,7 +2,7 @@ import pandas as pd
 import h5py
 from numpy import *
 from collections import OrderedDict
-from typing import List, Dict, Tuple, Any, Union
+from typing import List, Dict, Tuple, Any, Union, Callable
 
 
 def seed_permute(x: Union[int, ndarray], seed: Any):
@@ -163,6 +163,25 @@ class Iterations:
         # variables we'd like to analyze are often complex functions of the simple functions we use for
         # independent_variables
         self.__dependent_variables.update(self.data_frame[d_var_names].to_dict("dict"))
+
+    def new_dependent_variable(self, name: str, values: Union[ndarray, Callable[[pd.DataFrame], ndarray]]):
+        """
+        modifies iterations to include a new dependent variable defined external to the hdf5 file
+        Args:
+            name: name of the dependent variable to be added, must be distinct from existing independent and dependent
+                variable names
+            values: values the dependent variable will take. must have the same length as the iterations object of be a
+                callable that can parse the iterations df to return the desired dependent variable values
+        """
+        try:
+            dvals = values(self.data_frame)
+        except TypeError:
+            dvals = values
+        if type(dvals) is not ndarray:
+            raise TypeError("values must be (or return) an ndarray")
+        if dvals.shape != (len(self),):
+            raise ValueError("values must have shape = (len(iterations),)")
+
 
     def _get_independent_variables(self):
         """
