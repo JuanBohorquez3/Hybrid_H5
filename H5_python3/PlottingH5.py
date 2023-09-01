@@ -55,6 +55,9 @@ def default_plotting(
         shots: Union[int, List] = 1,
         description: str = "value",
         figsize: Tuple = None,
+        variables = None,
+        fig = None,
+        axarr = None,
         **kwargs
 ):
     """
@@ -86,6 +89,13 @@ def default_plotting(
     # Set default
     data_error = zeros(data.shape, dtype=float) if data_error is None else data_error
 
+    if variables is None:
+        variables = iterations.ivars
+    else:
+        if all([var in iterations.keys() for var in variables]):
+            pass
+        else:
+            raise ValueError(f"all variables in vars must be in iterations.keys()\nvars = {variables}")
     # Fix data and data_error indexing if necessary
     if data.shape != data_error.shape:
         raise ValueError("data and data error must have the same shape")
@@ -98,19 +108,22 @@ def default_plotting(
     else:
         num_shots = len(shots)
 
-    if len(iterations.ivars) == 0:
+    if len(variables) == 0:
         for shot in range(num_shots):
             print(f"shot {shot} {description} : {data[0, shot]:.3f} +/- {data_error[0, shot]:.3f}")
         return None, None
-    elif len(iterations.ivars) == 1:
-        independent_variable = list(iterations.keys())[1]
+    elif len(variables) == 1:
+        variable = variables[0]
         if figsize is None:
             figsize = (6, 5)
-        xlin = iterations[independent_variable]
+        xlin = iterations[variable]
         # Sort data to match ordering of iterations dataframe
-        data = data[array(iterations['iteration'], dtype=int)]
-        data_error = data_error[array(iterations['iteration'], dtype=int)]
-        fig, ax = plt.subplots(1, 1, figsize=figsize)
+        data = data.copy()[array(iterations['iteration'], dtype=int)]
+        data_error = data_error.copy()[array(iterations['iteration'], dtype=int)]
+        if fig is None or axarr is None:
+            fig, ax = plt.subplots(1, 1, figsize=figsize)
+        else:
+            ax = axarr[0]
         for shot in range(num_shots):
             if type(shots) is int:
                 label = f"Shot = {shot}"
@@ -119,21 +132,25 @@ def default_plotting(
             ax.errorbar(xlin, data[:, shot], yerr=data_error[:, shot], label=label, **kwargs)
         ax.legend()
         ax.set_ylabel(description)
-        ax.set_xlabel(independent_variable)
+        ax.set_xlabel(variable)
         fig.tight_layout()
         fig.show()
         return fig, ax
-    elif len(iterations.ivars) == 2:
+    elif len(variables) == 2:
+        if variables != iterations.ivars:
+            raise NotImplementedError("No Support for custom variables in 2D plots")
         if figsize is None:
             figsize = (num_shots * 5, 5)
         else:
             figsize = (num_shots * figsize[0], figsize[1])
-        fig, axarr = plt.subplots(1, num_shots, figsize=figsize)
+        if fig is None or axarr is None:
+            fig, axarr = plt.subplots(1, num_shots, figsize=figsize)
+        step_sizes = iterations._step_sizes()
         extent = [
-            min(iterations[iterations.ivars[1]] - iterations._step_sizes[1] / 2),  # left
-            max(iterations[iterations.ivars[1]] + iterations._step_sizes[1] / 2),  # right
-            max(iterations[iterations.ivars[0]] + iterations._step_sizes[0] / 2),  # bottom
-            min(iterations[iterations.ivars[0]] - iterations._step_sizes[0] / 2)   # top
+            min(iterations[variables[1]] - step_sizes[1] / 2),  # left
+            max(iterations[variables[1]] + step_sizes[1] / 2),  # right
+            max(iterations[variables[0]] + step_sizes[0] / 2),  # bottom
+            min(iterations[variables[0]] - step_sizes[0] / 2)   # top
         ]
         if num_shots == 1:
             axarr = [axarr]

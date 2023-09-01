@@ -91,8 +91,7 @@ class Iterations:
     def vars(self) -> List[str]:
         return self.ivars + self.dvars
 
-    @property
-    def _step_sizes(self) -> Tuple[float]:
+    def _step_sizes(self, variables=None) -> Tuple[float]:
         """
         Returns:
             the step size of each independent variable in this experiment, assuming even spacing
@@ -100,10 +99,14 @@ class Iterations:
                 Tuple ordered alphabetically by variable name
 
         """
+        if variables is None:
+            varvals = self.independent_variables
+        else:
+            varvals = {var: array(self[var]) for var in variables}
         sorted_values = [
-            sorted(list(set(values))) for iVar, values in self.items() if iVar != 'iteration'
+            sorted(list(set(values))) for iVar, values in varvals.items() if iVar != 'iteration'
         ]
-        return tuple([0 if len(vals) <= 1 else float(vals[1] - vals[0]) for vals in sorted_values])
+        return tuple([0 if len(vals) <= 1 else float(vals[1]) - float(vals[0]) for vals in sorted_values])
 
 
     @staticmethod
@@ -173,15 +176,30 @@ class Iterations:
             values: values the dependent variable will take. must have the same length as the iterations object of be a
                 callable that can parse the iterations df to return the desired dependent variable values
         """
-        try:
-            dvals = values(self.data_frame)
-        except TypeError:
+        if values is not iterable:
+            dvals = values(self)
+        else:
             dvals = values
+
         if type(dvals) is not ndarray:
             raise TypeError("values must be (or return) an ndarray")
         if dvals.shape != (len(self),):
             raise ValueError("values must have shape = (len(iterations),)")
 
+        dep_df = pd.DataFrame(columns=[name])
+        for c, iteration in enumerate(self.results["iterations"].items()):
+            try:
+                i = int(iteration[0])
+            except ValueError:
+                print(f"Warning : {iteration[0]} is not a valid iteration number")
+                continue
+            d_var_val = {name:dvals[i]}
+            index = self.loc[self["iteration"] == i].index[0]
+            dep_df = dep_df.append(pd.DataFrame(d_var_val, index=[index]))
+
+        self.data_frame = self.data_frame.join(dep_df)
+
+        self.__dependent_variables.update(self.data_frame[[name]].to_dict("dict"))
 
     def _get_independent_variables(self):
         """
