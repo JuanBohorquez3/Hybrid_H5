@@ -1,6 +1,6 @@
 from numpy import *
 import scipy.optimize as opt
-from scipy.special import erf
+from scipy.special import erf, gamma
 
 
 def load_data(h5file, inst, iteration, measurements, shots, roi=None, filter_N = 100):
@@ -129,7 +129,7 @@ def ret(hist_dat, cut, cut_err=0, ovlp=0):
     return retention, retention_error
 
 
-def fit_hist(hist_dat, guess=None):
+def fit_hist(hist_dat, guess=None, poisson=False):
     """
     fits hist_dat histogram to a function with two gaussian curves
     :param hist_dat: numpy array of counting data
@@ -137,7 +137,10 @@ def fit_hist(hist_dat, guess=None):
     :return: popt: len()=6 array of fitted parameters
     :return: perr: len()=6 array of uncertainty in each of the corresponding parameters
     """
-    func = dbl_gauss
+    if poisson:
+        func = dbl_poisson
+    else:
+        func = dbl_gauss
 
     bns = range(min(hist_dat), max(hist_dat), (max(hist_dat)-min(hist_dat))/30)
     h = histogram(hist_dat, bins=bns)
@@ -145,13 +148,20 @@ def fit_hist(hist_dat, guess=None):
     ydat = array(h[0], dtype=float)
 
     if guess is None:
-        x0g = 21000
-        x1g = 28000
-        std0g = 1000.0
-        std1g = 2000.0
-        a0g = 6.0e1
-        a1g = 6.0e1
-        guess = [x0g, x1g, std0g, std1g, a0g, a1g]
+        if poisson:
+            x0g = 5
+            x1g = 30
+            a0g = 200
+            a1g = 200
+            guess = [x0g,x1g,a0g,a1g]
+        else:
+            x0g = 21000
+            x1g = 28000
+            std0g = 1000.0
+            std1g = 2000.0
+            a0g = 6.0e1
+            a1g = 6.0e1
+            guess = [x0g, x1g, std0g, std1g, a0g, a1g]
 
     popt, pcov = opt.curve_fit(f=func, xdata=xdat, ydata=ydat, p0=guess)
     perr = sqrt(diag(pcov))
@@ -185,8 +195,23 @@ def dbl_gauss(x, x0, x1, std0, std1, a0, a1):
     g1 = a1*exp(-0.5*(xp1/std1)**2)
     return g0+g1
 
+def dbl_poisson(x,x0,x1,a0,a1):
+    """
+    Returns value of double poissonian function at x
+    Args:
+        x: Position to sample function
+        x0: mean of 0th poissonian
+        x1: mean of 1st poissonian
+        a0: amplitude of 0th poissonian
+        a1: amplitude of 1st poissonian
 
-def get_overlap_error(xc, x0, x1, s0, s1):
+    Returns: function's value at x
+    """
+    p0 = a0*exp(-x0)*x0**x/gamma(x+1)
+    p1 = a1*exp(-x1)*x1**x/gamma(x+1)
+    return p0+p1
+
+def get_overlap_error(xc, x0, x1, s0, s1, poisson=False):
     """
     Returns error rate due to overlap of both normal distributions
     :param xc: float, int between x0 and x1
@@ -198,7 +223,7 @@ def get_overlap_error(xc, x0, x1, s0, s1):
     return 0.5*(1-erf((xc-x0)/(sqrt(2)*s0)) + 1-erf((x1-xc)/(sqrt(2)*s1)))
 
 
-def get_cut(x0, x1, s0, s1):
+def get_cut(x0, x1, s0, s1, poisson=False):
     """
     Returns optimal cut between two normal distribution
     :param x0: mean of 0th normal distribution
@@ -207,6 +232,9 @@ def get_cut(x0, x1, s0, s1):
     :param s1: standard deviation of 1st normal distribution
     :return: xc: optimal cut
     """
+    if poisson:
+        return -(x1-x0)/log(x0/x1)
+
     rad = (x0-x1)**2+2*(s1**2-s0**2)*log(s1/s0)
     num = x1*s0**2-x0*s1**2-s0*s1*sqrt(rad)
     denum_inv = 1/(s0**2-s1**2)
