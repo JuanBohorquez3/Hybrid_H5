@@ -2,6 +2,8 @@ from typing import Union, Tuple, List
 from physics import *
 from scipy.interpolate import interp1d
 import numpy as np
+from Iterations import Iterations
+from scipy.optimize import curve_fit
 
 itar = Union[float,ndarray]
 
@@ -67,6 +69,7 @@ def SHO_ic(
     # yi = np.random.normal(scale=std_t, size=n)
     # zi = np.random.normal(scale=std_a, size=n)
     xlist = linspace(-2 * w0, 2 * w0, 1000)
+    #print(std_t)
     ps = trapt_p_dist(xlist, std_t, w0)
     xi = random.choice(xlist, n, p=ps / sum(ps))
     yi = random.choice(xlist, n, p=ps / sum(ps))
@@ -141,17 +144,6 @@ def drop_recapture_MC(
     # xi = np.random.normal(scale=std_t, size=n)
     # yi = np.random.normal(scale=std_t, size=n)
     # zi = np.random.normal(scale=std_a, size=n)
-    xlist = np.linspace(-2*w0, 2*w0, 1000)
-    ps = trapt_p_dist(xlist, std_t, w0)
-    xi = np.random.choice(xlist, n, p=ps/sum(ps))
-    yi = np.random.choice(xlist, n, p=ps/sum(ps))
-    zlist = np.linspace(-2*rayleigh, 2*rayleigh, 1000)
-    ps = trapz_p_dist(zlist, std_a, rayleigh)
-    zi = np.random.choice(zlist, n, p=ps/sum(ps))
-
-    vxi = np.random.normal(scale=std_v, size=n)
-    vyi = np.random.normal(scale=std_v, size=n)
-    vzi = np.random.normal(scale=std_v, size=n)
 
     xi, yi, zi, vxi, vyi, vzi = SHO_ic(temperature, p, w0, alpha_0, rayleigh, wl, n, v0, scramble=scramble)
 
@@ -202,61 +194,121 @@ def drop_recapture_MC(
     return retention, ret_std
 
 
-def drop_recapture_MC_residuals(
-        t: ndarray,
-        retention: ndarray,
-        retention_std: ndarray,
+def drop_recapture_MC_chiSquare(
+        t: itar,
+        experimental_data: ndarray,
+        experiment_data_errors: ndarray,
+        baseline_ret: float,
         temperature: float,
         p: float,
         w0: float,
         alpha_0: float = alpha_0_938,
         rayleigh: float = None,
         m: float = mcs,
-        wl: float = 938e-9
-    ) -> Tuple[iter, iter]:
+        wl: float = 938e-9,
+        gravity: bool = True,
+        n: int = 1000,
+        v0: List = None,
+) -> Tuple[itar, itar, itar]:
     """
-    Computes residuals of provided retention data to drop-recapture curved produced at the given temperature
+    Performs a monte-carlo (MC) simulation of a single atom trapped in an ODT that is pulsed off for a time(s)
+    t. Computes the probability of the atom to be re-captured once the ODT is turned back on.
     Args:
-        t: array of drop time sampled (us)
-        retention: retention rate measured at each drop time sampled
-        retention_std: one sigma uncertainty in retention values
-        temperature: temperature of MC (uK)
-        p: power in ODT (mW)
-        w0: waist of ODT (um)
-        alpha_0: polarizability of atom at ODT wavelength. Default is Cs polarizability at 938nm. (Jm^2/s^2)
+        t: drop time(s) of the drop-recapture experiment to be sampled (s)
+        experimental_data: Experimentally measured retention through Drop Recapture (fractions)
+        experiment_data_errors: Uncertainty in measured retention (fractions)
+        baseline_ret: Baseline retention with no drop (fraction)
+        temperature: temperature of atom (K)
+        p: power of the ODT beam (W)
+        w0: waist of the ODT beam (m)
+        alpha_0: atom polarizability at ODT wavelength. Default is alpha_0 for Cs at 938nm. (Jm^2/V^2)
         rayleigh: rayleigh range of the ODT beam. Computed from w0 and wl if not provided. (m)
         m: mass of the trapped atom. Default is mass of cesium (kg)
         wl: wavelength of trapping light. Default is 938nm (m)
+        gravity: if True, gravity is considered in model evolution, otherwise it is ignored.
+        n: number of times to repeat the MC simulation. Default if 1000
+        v0: default [0,0,0]. If provided and non-zero the Maxwell-Boltzmann distribution for velocities will
+            be centered around v0[i] instead of zero.
 
     Returns:
-        residuals,res_std: residuals between MC and provided retention data, and one sigma uncertainty in residuals
+        retention, retention_std, chi_square: recapture probability of atom after ODT is dropped for time(s) t, statistical
+            uncertainty in the recapture probability (Computed from the shot-noise limit retention(1-retention)/sqrt(n)),
+            chi_square of experimental data compared to simultated data."""
+    retention, ret_std = drop_recapture_MC(t=t, temperature=temperature, p=p, w0=w0, alpha_0=alpha_0, rayleigh=rayleigh,
+                                           m=m, wl=wl, gravity=gravity, n=n, v0=v0)
+    retention = baseline_ret * retention
+    residuals = experimental_data - retention
+    total_sigma = np.sqrt(experiment_data_errors ** 2 + ret_std ** 2)
+    chi_square = np.sum((residuals / total_sigma) ** 2)
+    return (retention, ret_std, chi_square)
+
+
+def get_temp(
+        iterations: Iterations,
+        retention: itar,
+        ret_std: itar,
+        max_retention: float,
+        p: float,
+        w0: float,
+        alpha_0: float = alpha_0_938,
+        rayleigh: float = None,
+        m: float = mcs,
+        wl: float = 938e-9,
+        gravity: bool = True,
+        n: int = 1000,
+        temp_list: itar = None
+) -> Tuple[float,float,itar]:
     """
-    tl = np.linspace(0, max(t) * 1.3, 400)
-    retMC, dretMC = drop_recapture_MC(tl, temperature, p, w0, alpha_0, rayleigh, m, wl, gravity=True, n=2000)
 
-    rate = 4
-    ys = np.zeros((rate, len(t)))
-    dys = np.zeros(ys.shape)
-    # interpolate MC but smooth it out
-    for o in range(rate):
-        tr = tl[o::rate]
-        yr = retMC[o::rate]
-        dy = dretMC[o::rate]
+    Args:
+        iterations: Experiment iterations object
+        retention: Experimentally measured retention through Drop Recapture (fractions)
+        ret_std: Uncertainty in measured retention (fractions)
+        max_retention: Baseline retention with no drop (fraction)
+        p: Power of the ODT beam (W)
+        w0: Waist of the ODT beam (m)
+        alpha_0: atom polarizability at ODT wavelength. Default is alpha_0 for Cs at 938nm. (Jm^2/V^2)
+        rayleigh: rayleigh range of the ODT beam. Computed from w0 and wl if not provided. (m)
+        m: mass of the trapped atom. Default is mass of cesium (kg)
+        wl: wavelength of trapping light. Default is 938nm (m)
+        gravity: if True, gravity is considered in model evolution, otherwise it is ignored.
+        n: number of times to repeat the MC simulation. Default if 1000
+        temp_list: ndarray of temperatures to sample for best fit (uK)
 
-        tr[0] = 0
-        yr[0] = 1
-        dy[0] = 0
+    Returns:
+        T, dT, Xs:
+            T: best fit Temperature (uK)
+            dT: uncertainty in T (uK)
+            Xs: List of Chi-Squared Values sampled at temp_list
+    """
 
-        fun = interp1d(tr, yr, kind="quadratic")
-        dfun = interp1d(tr, dy, kind="quadratic")
+    def fit_function(x, a, b, c, d, e, x0):
+        return(a*(x-x0)**5 + b*(x-x0)**4 + c*(x-x0)**3 + d*(x-x0)**2 + e)
 
-        ys[o] = fun(t)
-        dys[o] = dfun(t)
+    if temp_list is None:
+        temp_list = arange(1, 100, 1)  # 0 - 100uK in 1uK steps
 
-    yavg = ys.mean(0)
-    dyavg = dys.mean(0)
+    drop_times = iterations.independent_variables[iterations.ivars[0]]*10**(-6)
+    chi_square_vals = []
 
-    residuals = yavg - retention
-    res_std = sqrt(dyavg ** 2 + retention_std ** 2)
+    for temp in temp_list:
+        sim_retention, sim_ret_std, sim_chi_square = drop_recapture_MC_chiSquare(t=drop_times,
+                                                                                 experimental_data=retention,
+                                                                                 experiment_data_errors=ret_std,
+                                                                                 baseline_ret=max_retention,
+                                                                                 temperature=temp*10**(-6),
+                                                                                 p=p,
+                                                                                 w0=w0,
+                                                                                 alpha_0=alpha_0,
+                                                                                 rayleigh=rayleigh,
+                                                                                 m=m,
+                                                                                 wl=wl,
+                                                                                 gravity=gravity,
+                                                                                 n=n)
+        chi_square_vals.append(sim_chi_square)
 
-    return residuals, res_std
+    temp_guess = float(temp_list[chi_square_vals == np.amin(chi_square_vals)])
+
+    popt, pcov = curve_fit(fit_function, temp_list, chi_square_vals, maxfev=5000, p0=[0,0,0,0,0,temp_guess])
+    uncertainX0 = np.sqrt((1/popt[3]) + np.diag(pcov)[5])
+    return (popt[5], uncertainX0, chi_square_vals, popt)
